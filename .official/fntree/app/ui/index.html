@@ -31,6 +31,8 @@
             <p>选择已授权目录并执行扫描，再在 treemap 中查看空间分布。</p>
           </div>
           <div class="header-actions">
+            <a class="button button-ghost" href="/search.html">文件搜索</a>
+            <button id="importResultButton" class="button button-ghost" type="button">导入结果</button>
             <button id="historyToggleButton" class="button button-ghost" type="button">历史记录</button>
             <a class="button button-ghost" href="/settings.html">扫描设置</a>
           </div>
@@ -98,8 +100,8 @@
             <div class="card-title">详情</div>
             <div id="selectionDetails" class="selection-empty">点击任意块查看详情</div>
             <div class="inspector-actions">
+              <mdui-button id="exportResultButton" variant="filled-tonal">导出结果</mdui-button>
               <mdui-button id="copyPathButton" variant="filled-tonal">复制路径</mdui-button>
-              <mdui-button id="openInFilesButton" variant="text">在文件管理器中打开</mdui-button>
             </div>
             <div class="inspector-list-header">
               <div class="card-title sub-card-title">当前层级子项</div>
@@ -125,6 +127,8 @@
       </div>
       <div id="recentTasks" class="recent-empty">还没有分析记录</div>
     </aside>
+
+    <input id="importResultInput" type="file" accept=".json,.fntree.json,application/json" hidden>
 
     <script src="/app.js"></script>
   </body>

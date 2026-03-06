@@ -16,6 +16,10 @@ const TASKS_FILE = path.join(DATA_ROOT, 'tasks.json');
 const PORT = Number(process.env.PORT || process.env.TRIM_SERVICE_PORT || 37125);
 const GDU_BINARY = process.env.GDU_BIN || path.join(APP_ROOT, 'bin', 'gdu');
 const GDU_MOCK_FILE = process.env.GDU_MOCK_FILE || '';
+const PLOCATE_BINARY = process.env.PLOCATE_BIN || 'plocate';
+const LOCATE_BINARY = process.env.LOCATE_BIN || 'locate';
+const FD_BINARY = process.env.FD_BIN || 'fd';
+const FDFIND_BINARY = process.env.FDFIND_BIN || 'fdfind';
 const TASK_RETENTION_MS = 6 * 60 * 60 * 1000;
 
 const tasks = new Map();
@@ -134,6 +138,10 @@ function defaultSettings() {
       topLimit: 30,
       treemapMaxVisible: 24,
     },
+    searchOptions: {
+      quickLimit: 50,
+      liveLimit: 50,
+    },
     updatedAt: null,
   };
 }
@@ -141,6 +149,8 @@ function defaultSettings() {
 function normalizeSettings(settings) {
   const defaults = defaultSettings();
   const scanOptions = settings && typeof settings.scanOptions === 'object' ? settings.scanOptions : {};
+  const searchOptions =
+    settings && typeof settings.searchOptions === 'object' ? settings.searchOptions : {};
   const allowedThemes = new Set(['cinnamon', 'slate', 'forest', 'ocean']);
   return {
     accessiblePaths: Array.isArray(settings?.accessiblePaths)
@@ -159,6 +169,20 @@ function normalizeSettings(settings) {
         defaults.scanOptions.treemapMaxVisible,
         5,
         30,
+      ),
+    },
+    searchOptions: {
+      quickLimit: normalizeBoundedInteger(
+        searchOptions.quickLimit,
+        defaults.searchOptions.quickLimit,
+        10,
+        200,
+      ),
+      liveLimit: normalizeBoundedInteger(
+        searchOptions.liveLimit,
+        defaults.searchOptions.liveLimit,
+        10,
+        200,
       ),
     },
     updatedAt: settings?.updatedAt || defaults.updatedAt,
@@ -243,6 +267,7 @@ async function handleApi(req, res, url) {
       ...settings,
       gduBinary: GDU_BINARY,
       gduAvailable: fs.existsSync(GDU_BINARY),
+      searchStatus: getSearchStatus(),
       mockMode: Boolean(GDU_MOCK_FILE),
     });
     return;
@@ -254,6 +279,8 @@ async function handleApi(req, res, url) {
     const current = readSettings();
     const incomingScanOptions =
       payload && typeof payload.scanOptions === 'object' ? payload.scanOptions : {};
+    const incomingSearchOptions =
+      payload && typeof payload.searchOptions === 'object' ? payload.searchOptions : {};
 
     const saved = writeSettings({
       accessiblePaths: current.accessiblePaths,
@@ -262,6 +289,10 @@ async function handleApi(req, res, url) {
         ...current.scanOptions,
         ...incomingScanOptions,
       },
+      searchOptions: {
+        ...current.searchOptions,
+        ...incomingSearchOptions,
+      },
       updatedAt: new Date().toISOString(),
     });
 
@@ -269,8 +300,80 @@ async function handleApi(req, res, url) {
       ...saved,
       gduBinary: GDU_BINARY,
       gduAvailable: fs.existsSync(GDU_BINARY),
+      searchStatus: getSearchStatus(),
       mockMode: Boolean(GDU_MOCK_FILE),
     });
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/search/status') {
+    writeJson(res, 200, getSearchStatus());
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/search') {
+    const body = await readBody(req);
+    const payload = parseJson(body);
+    const query = typeof payload.query === 'string' ? payload.query.trim() : '';
+    const mode = payload.mode === 'live' ? 'live' : 'quick';
+    const requestedBasePath =
+      typeof payload.basePath === 'string' ? payload.basePath.trim() : '';
+
+    if (!query) {
+      writeJson(res, 400, {
+        error: 'invalid_query',
+        message: 'Search query is required.',
+      });
+      return;
+    }
+
+    const settings = readSettings();
+    const access =
+      requestedBasePath && requestedBasePath !== '*'
+        ? validatePathAccess(requestedBasePath, settings.accessiblePaths)
+        : { ok: true };
+
+    if (!access.ok) {
+      writeJson(res, 403, {
+        error: 'path_not_authorized',
+        message: access.message,
+        accessiblePaths: settings.accessiblePaths,
+      });
+      return;
+    }
+
+    const basePath = requestedBasePath && requestedBasePath !== '*' ? requestedBasePath : '';
+    const requestedLimit = normalizeBoundedInteger(
+      payload.limit,
+      mode === 'live' ? settings.searchOptions.liveLimit : settings.searchOptions.quickLimit,
+      10,
+      200,
+    );
+
+    try {
+      const result = await searchPaths({
+        mode,
+        query,
+        basePath,
+        limit: requestedLimit,
+        accessiblePaths: settings.accessiblePaths,
+      });
+
+      writeJson(res, 200, {
+        mode,
+        query,
+        basePath: basePath || null,
+        total: result.items.length,
+        backend: result.backend,
+        limit: requestedLimit,
+        items: result.items,
+      });
+    } catch (error) {
+      writeJson(res, error.statusCode || 503, {
+        error: error.code || 'search_failed',
+        message: error.message,
+      });
+    }
     return;
   }
 
@@ -723,6 +826,202 @@ function taskResponse(task) {
     stdoutBytes: task.stdoutBytes,
     stderr: task.stderr,
   };
+}
+
+function getSearchStatus() {
+  return {
+    quickBackend: detectBinary([PLOCATE_BINARY, LOCATE_BINARY]),
+    liveBackend: detectBinary([FD_BINARY, FDFIND_BINARY]),
+  };
+}
+
+function detectBinary(candidates) {
+  for (const candidate of candidates) {
+    const available = isExecutableCommand(candidate);
+    if (available) {
+      return {
+        available: true,
+        command: candidate,
+      };
+    }
+  }
+
+  return {
+    available: false,
+    command: candidates[0],
+  };
+}
+
+function isExecutableCommand(command) {
+  if (!command) {
+    return false;
+  }
+
+  if (path.isAbsolute(command)) {
+    return fs.existsSync(command);
+  }
+
+  return true;
+}
+
+async function searchPaths(options) {
+  return options.mode === 'live' ? searchWithFd(options) : searchWithLocate(options);
+}
+
+async function searchWithLocate(options) {
+  const backend = detectBinary([PLOCATE_BINARY, LOCATE_BINARY]);
+  if (!backend.available) {
+    const error = new Error('未找到 plocate/locate，当前无法执行快速搜索。');
+    error.code = 'quick_backend_missing';
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const args = [options.query];
+  const raw = await runCommand(backend.command, args, {
+    maxOutputBytes: 4 * 1024 * 1024,
+  });
+  const candidates = splitCommandOutput(raw.stdout);
+  const items = await collectSearchResults(candidates, options);
+  return {
+    backend: backend.command,
+    items,
+  };
+}
+
+async function searchWithFd(options) {
+  const backend = detectBinary([FD_BINARY, FDFIND_BINARY]);
+  if (!backend.available) {
+    const error = new Error('未找到 fd/fdfind，当前无法执行实时搜索。');
+    error.code = 'live_backend_missing';
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const searchRoot = options.basePath || options.accessiblePaths[0];
+  if (!searchRoot) {
+    const error = new Error('没有可用的授权目录，无法执行实时搜索。');
+    error.code = 'no_accessible_paths';
+    error.statusCode = 403;
+    throw error;
+  }
+
+  const args = ['--absolute-path', '--color', 'never', '--hidden', '--full-path', options.query, searchRoot];
+  const raw = await runCommand(backend.command, args, {
+    maxOutputBytes: 4 * 1024 * 1024,
+  });
+  const candidates = splitCommandOutput(raw.stdout);
+  const items = await collectSearchResults(candidates, options);
+  return {
+    backend: backend.command,
+    items,
+  };
+}
+
+function splitCommandOutput(value) {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+async function collectSearchResults(paths, options) {
+  const seen = new Set();
+  const items = [];
+  const normalizedAllowed = options.accessiblePaths.map((item) => path.resolve(item));
+  const normalizedBase = options.basePath ? path.resolve(options.basePath) : '';
+  const queryLower = options.query.toLowerCase();
+
+  for (const rawPath of paths) {
+    const resolved = path.resolve(rawPath);
+    if (seen.has(resolved)) {
+      continue;
+    }
+
+    if (!isPathAllowed(resolved, normalizedAllowed, normalizedBase)) {
+      continue;
+    }
+
+    const name = path.basename(resolved);
+    if (!resolved.toLowerCase().includes(queryLower) && !name.toLowerCase().includes(queryLower)) {
+      continue;
+    }
+
+    let stats;
+    try {
+      stats = fs.statSync(resolved);
+    } catch {
+      continue;
+    }
+
+    seen.add(resolved);
+    items.push({
+      path: resolved,
+      name,
+      type: stats.isDirectory() ? 'directory' : 'file',
+      size: stats.size,
+      mtime: stats.mtime.toISOString(),
+      parent: path.dirname(resolved),
+    });
+
+    if (items.length >= options.limit) {
+      break;
+    }
+  }
+
+  return items;
+}
+
+function isPathAllowed(targetPath, accessiblePaths, basePath) {
+  if (basePath) {
+    return targetPath === basePath || targetPath.startsWith(`${basePath}${path.sep}`);
+  }
+
+  return accessiblePaths.some(
+    (allowed) => targetPath === allowed || targetPath.startsWith(`${allowed}${path.sep}`),
+  );
+}
+
+function runCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd: TEMP_ROOT,
+      env: process.env,
+    });
+    let stdout = '';
+    let stderr = '';
+    const maxOutputBytes = options.maxOutputBytes || 1024 * 1024;
+
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk.toString();
+      if (stdout.length > maxOutputBytes) {
+        child.kill('SIGTERM');
+      }
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (error) => {
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      if (code !== 0 && stdout.trim() === '') {
+        const error = new Error(stderr.trim() || `${command} exited with code ${code}`);
+        error.code = 'command_failed';
+        reject(error);
+        return;
+      }
+
+      resolve({
+        stdout,
+        stderr,
+        code,
+      });
+    });
+  });
 }
 
 function collectChildNodes(node) {

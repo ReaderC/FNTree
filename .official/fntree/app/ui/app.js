@@ -1,6 +1,7 @@
 const state = {
   taskId: null,
   pollTimer: null,
+  localTaskStartedAt: null,
   accessiblePaths: [],
   rootNode: null,
   zoomPath: [],
@@ -40,6 +41,7 @@ const selectionDetails = document.getElementById('selectionDetails');
 const childrenList = document.getElementById('childrenList');
 const recentTasks = document.getElementById('recentTasks');
 const historyToggleButton = document.getElementById('historyToggleButton');
+const importResultButton = document.getElementById('importResultButton');
 const historyCloseButton = document.getElementById('historyCloseButton');
 const historyDrawer = document.getElementById('historyDrawer');
 const historyBackdrop = document.getElementById('historyBackdrop');
@@ -49,9 +51,11 @@ const detailLevelLabel = document.getElementById('detailLevelLabel');
 const zoomOutButton = document.getElementById('zoomOutButton');
 const resetZoomButton = document.getElementById('resetZoomButton');
 const copyPathButton = document.getElementById('copyPathButton');
-const openInFilesButton = document.getElementById('openInFilesButton');
+const exportResultButton = document.getElementById('exportResultButton');
+const openInFilesButton = { addEventListener() {} };
 const clearTasksButton = document.getElementById('clearTasksButton');
 const treemapFilter = document.getElementById('treemapFilter');
+const importResultInput = document.getElementById('importResultInput');
 const TREEMAP_MAX_VISIBLE = 24;
 let treemapTooltip = null;
 
@@ -139,12 +143,28 @@ historyToggleButton?.addEventListener('click', () => {
   setHistoryOpen(true);
 });
 
+importResultButton?.addEventListener('click', () => {
+  importResultInput?.click();
+});
+
 historyCloseButton?.addEventListener('click', () => {
   setHistoryOpen(false);
 });
 
 historyBackdrop?.addEventListener('click', () => {
   setHistoryOpen(false);
+});
+
+exportResultButton?.addEventListener('click', () => {
+  exportCurrentResult().catch((error) => {
+    showError(error.message || '导出结果失败');
+  });
+});
+
+importResultInput?.addEventListener('change', () => {
+  importResultFromFile().catch((error) => {
+    showError(error.message || '导入结果失败');
+  });
 });
 
 treemapFilter?.querySelectorAll('[data-filter]').forEach((button) => {
@@ -289,6 +309,7 @@ async function startAnalyze() {
   }
 
   analyzeButton.loading = true;
+  state.localTaskStartedAt = Date.now();
   taskStatus.textContent = '正在提交任务';
 
   try {
@@ -1278,7 +1299,7 @@ function renderTask(task) {
   if (task.status === 'completed') {
     taskStatus.textContent = `分析完成: ${task.path}`;
     if (taskProgress) {
-      taskProgress.textContent = `扫描完成，用时 ${formatDuration(task.startedAt, task.finishedAt)}`;
+      taskProgress.textContent = `扫描完成，用时 ${formatTaskElapsed(task)}`;
     }
     state.rootNode = task.result?.root || null;
     state.zoomPath = [];
@@ -1293,7 +1314,7 @@ function renderTask(task) {
   if (taskProgress) {
     taskProgress.textContent = task.stderr
       ? lastProgressLine(task.stderr)
-      : `正在扫描，已运行 ${formatDuration(task.startedAt)}`;
+      : `正在扫描，已运行 ${formatTaskElapsed(task)}`;
   }
 }
 
@@ -1396,6 +1417,27 @@ function formatDuration(startedAt, finishedAt) {
     return '-';
   }
   const totalSeconds = Math.max(Math.round((end - start) / 1000), 0);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) {
+    return `${seconds} 秒`;
+  }
+  return `${minutes} 分 ${seconds} 秒`;
+}
+
+function formatTaskElapsed(task) {
+  if (task?.id === state.taskId && Number.isFinite(state.localTaskStartedAt)) {
+    const end = task.finishedAt ? Date.parse(task.finishedAt) : Date.now();
+    if (!Number.isNaN(end)) {
+      return formatDurationFromMs(Math.max(end - state.localTaskStartedAt, 0));
+    }
+  }
+
+  return formatDuration(task?.startedAt, task?.finishedAt);
+}
+
+function formatDurationFromMs(durationMs) {
+  const totalSeconds = Math.max(Math.round(durationMs / 1000), 0);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   if (minutes <= 0) {
@@ -1738,6 +1780,213 @@ function rgbToHex({ r, g, b }) {
   return `#${[r, g, b]
     .map((value) => value.toString(16).padStart(2, '0'))
     .join('')}`;
+}
+
+async function exportCurrentResult() {
+  if (!state.rootNode) {
+    throw new Error('当前没有可导出的扫描结果');
+  }
+
+  let task = null;
+  if (state.taskId) {
+    try {
+      task = await fetchJson(`/api/analyze/${state.taskId}`);
+    } catch {
+      task = null;
+    }
+  }
+
+  const payload = buildExportPayload(task, state.rootNode);
+  downloadExportPayload(payload);
+  showMessage('扫描结果已导出');
+}
+
+async function exportTaskById(taskId) {
+  const task = await fetchJson(`/api/analyze/${taskId}`);
+  if (!task?.result?.root) {
+    throw new Error('该任务没有可导出的结果');
+  }
+
+  const payload = buildExportPayload(task, task.result.root);
+  downloadExportPayload(payload);
+  showMessage('扫描结果已导出');
+}
+
+function buildExportPayload(task, rootNode) {
+  return {
+    format: 'fntree-scan-export',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    source: task?.id ? 'task' : 'workspace',
+    task: task
+      ? {
+          id: task.id,
+          path: task.path,
+          createdAt: task.createdAt,
+          finishedAt: task.finishedAt,
+          scanOptions: task.scanOptions || null,
+        }
+      : {
+          id: null,
+          path: rootNode?.path || '',
+          createdAt: null,
+          finishedAt: null,
+          scanOptions: null,
+        },
+    result: task?.result || {
+      root: rootNode,
+      largest: [],
+    },
+  };
+}
+
+function downloadExportPayload(payload) {
+  const pathLabel = sanitizeFilePart(payload.task?.path || payload.result?.root?.path || 'scan');
+  const timestamp = new Date()
+    .toISOString()
+    .replace(/[:T]/g, '-')
+    .replace(/\..+$/, '');
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {
+    type: 'application/json;charset=utf-8',
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `${pathLabel}-${timestamp}.fntree.json`;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+async function importResultFromFile() {
+  const file = importResultInput?.files?.[0];
+  if (!file) {
+    return;
+  }
+
+  const content = await file.text();
+  const payload = JSON.parse(content);
+  const root = payload?.format === 'fntree-scan-export' ? payload?.result?.root : payload?.root;
+
+  if (!root || typeof root !== 'object' || !root.path) {
+    throw new Error('导入文件格式不正确');
+  }
+
+  state.taskId = null;
+  state.rootNode = root;
+  state.zoomPath = [];
+  state.selectedPath = root.path;
+  state.detailLevel = 0;
+  state.layoutCache = new Map();
+  taskStatus.textContent = `已导入结果: ${payload?.task?.path || root.path}`;
+  taskProgress.textContent = payload?.exportedAt
+    ? `导出时间 ${formatDate(payload.exportedAt)}`
+    : '已从文件导入结果';
+  renderWorkspace();
+  showMessage('扫描结果已导入');
+
+  if (importResultInput) {
+    importResultInput.value = '';
+  }
+}
+
+function sanitizeFilePart(value) {
+  return String(value || 'scan')
+    .replace(/[\\/:*?"<>|]+/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(-80);
+}
+
+function renderRecentTasks(items) {
+  if (!items.length) {
+    recentTasks.innerHTML = '<div class="recent-empty">还没有分析记录</div>';
+    writeCacheItem(TASKS_CACHE_KEY, { items: [] });
+    return;
+  }
+
+  recentTasks.innerHTML = items
+    .map(
+      (item) => `
+        <div class="recent-row">
+          <div class="recent-header">
+            <div class="recent-path">${escapeHtml(item.path)}</div>
+            <div class="status-badge">${statusText(item.status)}</div>
+          </div>
+          <div class="recent-main">
+            <div class="recent-meta">
+              <span class="recent-meta-chip">${escapeHtml(formatDate(item.createdAt))}</span>
+              ${
+                item.error
+                  ? `<span class="recent-meta-chip recent-meta-chip-danger">${escapeHtml(item.error)}</span>`
+                  : ''
+              }
+            </div>
+            <div class="recent-actions">
+              <button class="action-link" type="button" data-path="${escapeAttribute(item.path)}">重新分析</button>
+              <button class="action-link" type="button" data-task-id="${escapeAttribute(item.id)}">查看结果</button>
+              ${
+                item.status === 'completed'
+                  ? `<button class="action-link" type="button" data-export-id="${escapeAttribute(item.id)}">导出结果</button>`
+                  : ''
+              }
+              <button class="action-link action-link-danger" type="button" data-delete-id="${escapeAttribute(item.id)}">删除记录</button>
+            </div>
+          </div>
+        </div>
+      `,
+    )
+    .join('');
+
+  recentTasks.querySelectorAll('[data-path]').forEach((button) => {
+    button.addEventListener('click', () => {
+      pathInput.value = button.dataset.path || '';
+      startAnalyze().catch((error) => {
+        showError(error.message || '分析启动失败');
+      });
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-task-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        const task = await fetchJson(`/api/analyze/${button.dataset.taskId}`);
+        state.taskId = task.id;
+        renderTask(task);
+        setHistoryOpen(false);
+      } catch (error) {
+        showError(error.message || '读取任务失败');
+      }
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-export-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await exportTaskById(button.dataset.exportId);
+      } catch (error) {
+        showError(error.message || '导出结果失败');
+      }
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-delete-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await fetchJson(`/api/analyze/${button.dataset.deleteId}`, { method: 'DELETE' });
+        if (state.taskId === button.dataset.deleteId) {
+          clearWorkspace();
+          state.taskId = null;
+        }
+        await refreshRecentTasks();
+        showMessage('任务记录已删除');
+      } catch (error) {
+        showError(error.message || '删除记录失败');
+      }
+    });
+  });
+
+  writeCacheItem(TASKS_CACHE_KEY, { items });
 }
 
 function renderTreemapOnly() {

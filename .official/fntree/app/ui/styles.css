@@ -169,6 +169,21 @@ h1 {
   margin-bottom: 20px;
 }
 
+.search-panel,
+.workspace-panel {
+  position: relative;
+}
+
+.search-panel {
+  z-index: 120;
+  isolation: isolate;
+  overflow: visible;
+}
+
+.workspace-panel {
+  z-index: 10;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
@@ -379,7 +394,7 @@ h1 {
   top: calc(100% + 8px);
   left: 0;
   right: 0;
-  z-index: 60;
+  z-index: 500;
   max-height: 320px;
   overflow: auto;
   padding: 8px;
@@ -854,6 +869,7 @@ h1 {
 
 .inspector-actions {
   margin-bottom: 8px;
+  align-items: center;
 }
 
 #recentTasks {
@@ -966,6 +982,10 @@ h1 {
   flex-wrap: wrap;
 }
 
+#importResultInput {
+  display: none;
+}
+
 .action-link-danger {
   color: #b33a28;
 }
@@ -1058,9 +1078,173 @@ h1 {
   justify-content: flex-end;
 }
 
+.search-shell {
+  width: min(1320px, calc(100vw - 32px));
+}
+
+.search-page-panel {
+  min-height: calc(100vh - 56px);
+}
+
+.search-page-grid,
+.search-results-grid,
+.search-form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.search-page-grid {
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.7fr);
+  margin-bottom: 18px;
+}
+
+.search-results-grid {
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.85fr);
+}
+
+.search-control-card,
+.search-results-card,
+.search-detail-card,
+.search-status-card {
+  padding: 22px;
+}
+
+.search-control-head,
+.search-results-header,
+.search-action-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.search-control-head {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.search-form-grid {
+  grid-template-columns: 1.1fr 1.7fr 160px;
+  align-items: end;
+  margin-bottom: 18px;
+}
+
+.theme-select,
+.theme-input {
+  width: 100%;
+  min-height: 56px;
+  padding: 14px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--panel-border);
+  background: var(--accent-soft-bg-muted);
+  color: var(--text-main);
+  font: inherit;
+  outline: none;
+}
+
+.theme-select:focus,
+.theme-input:focus {
+  border-color: var(--accent-border-strong);
+  box-shadow: 0 0 0 4px var(--accent-soft-bg);
+}
+
+.search-metric-value {
+  font-size: 28px;
+}
+
+.search-result-list {
+  display: grid;
+  gap: 12px;
+  max-height: calc(100vh - 320px);
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.search-result-list::-webkit-scrollbar {
+  width: 12px;
+}
+
+.search-result-list::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: 999px;
+}
+
+.search-result-list::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, var(--scrollbar-thumb-start), var(--scrollbar-thumb-end));
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.search-result-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  width: 100%;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--panel-border);
+  background: var(--accent-soft-bg-muted);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease, background 120ms ease;
+}
+
+.search-result-item:hover,
+.search-result-item.is-selected {
+  border-color: var(--accent-border-strong);
+  background: var(--accent-soft-bg);
+  transform: translateY(-1px);
+}
+
+.search-result-main,
+.search-result-side {
+  display: grid;
+  gap: 6px;
+}
+
+.search-result-name {
+  font-size: 20px;
+  font-weight: 700;
+  word-break: break-word;
+}
+
+.search-result-meta,
+.search-result-date {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.search-result-size {
+  color: var(--accent);
+  font-size: 20px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.search-selection {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.selection-path {
+  color: var(--text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+  word-break: break-word;
+}
+
+.search-detail-actions {
+  margin-top: 16px;
+}
+
 @media (max-width: 1100px) {
   .workspace-grid,
-  .settings-page-grid {
+  .settings-page-grid,
+  .search-page-grid,
+  .search-results-grid {
     grid-template-columns: 1fr;
   }
 
@@ -1084,7 +1268,8 @@ h1 {
   .hero,
   .hint-row,
   .search-grid,
-  .settings-footer {
+  .settings-footer,
+  .search-form-grid {
     grid-template-columns: 1fr;
     display: grid;
   }
@@ -1106,7 +1291,10 @@ h1 {
   .card-top,
   .treemap-toolbar,
   .inspector-list-header,
-  .history-drawer-header {
+  .history-drawer-header,
+  .search-control-head,
+  .search-action-row,
+  .search-results-header {
     align-items: flex-start;
     flex-direction: column;
   }
