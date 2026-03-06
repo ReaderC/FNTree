@@ -3,7 +3,7 @@
     "fntree.Application": {
       "title": "FN Tree",
       "icon": "images/icon_{0}.png",
-      "type": "iframe",
+      "type": "url",
       "protocol": "",
       "port": "37125",
       "url": "/",

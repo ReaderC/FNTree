@@ -15,14 +15,12 @@
         <div>
           <div class="eyebrow">FNOS Storage Analyzer</div>
           <h1>FN Tree</h1>
-          <p class="hero-copy">
-            用 treemap 方式查看目录和文件占用，越大的块越显眼，点击即可逐层钻取。
-          </p>
+          <p class="hero-copy">用 treemap 查看目录和文件占用。块越大，占用越高；点击即可逐层下钻。</p>
         </div>
         <div class="hero-card">
           <div class="metric-label">后端状态</div>
           <div class="metric-value" id="healthLabel">检查中</div>
-          <div class="metric-meta" id="gduLabel">等待探测 gdu</div>
+          <div class="metric-meta" id="gduLabel">等待检测 gdu</div>
         </div>
       </section>
 
@@ -30,12 +28,18 @@
         <div class="panel-header">
           <div>
             <h2>开始分析</h2>
-            <p>选择已授权目录，执行一次完整扫描，然后在 treemap 中钻取结果。</p>
+            <p>选择已授权目录并执行扫描，再在 treemap 中查看空间分布。</p>
           </div>
+          <a class="button button-ghost" href="/settings.html">扫描设置</a>
         </div>
 
         <div class="search-grid">
-          <mdui-select id="accessiblePathSelect" label="已授权目录"></mdui-select>
+          <label class="field">
+            <span class="field-label">已授权目录</span>
+            <select id="accessiblePathSelect" class="native-select">
+              <option value="">请选择已授权目录</option>
+            </select>
+          </label>
           <mdui-text-field id="pathInput" label="分析目录" placeholder="/vol1/media"></mdui-text-field>
           <mdui-button id="analyzeButton" full-width>开始分析</mdui-button>
         </div>
@@ -57,7 +61,7 @@
         <div class="panel-header">
           <div>
             <h2>空间视图</h2>
-            <p>点击块进入子目录；文件和目录会一起展示。</p>
+            <p>单个大项的可视面积会限制在 50% 以内，剩余空间留给中小项展示，避免只看到一个超大块。</p>
           </div>
           <div id="taskStatus">尚未开始</div>
         </div>
@@ -71,7 +75,13 @@
                 <mdui-button id="resetZoomButton" variant="text">回到根目录</mdui-button>
               </div>
             </div>
-            <div id="breadcrumbBar" class="breadcrumb-bar">等待结果</div>
+            <div class="treemap-toolbar">
+              <div id="breadcrumbBar" class="breadcrumb-bar">等待结果</div>
+              <div class="legend">
+                <span class="legend-chip legend-dir">目录占用</span>
+                <span class="legend-chip legend-file">文件占用</span>
+              </div>
+            </div>
             <div id="treemapView" class="treemap-empty">等待结果</div>
           </div>
 
@@ -82,7 +92,10 @@
               <mdui-button id="copyPathButton" variant="filled-tonal">复制路径</mdui-button>
               <mdui-button id="openInFilesButton" variant="text">在文件管理器中打开</mdui-button>
             </div>
-            <div class="card-title sub-card-title">当前层级子项</div>
+            <div class="inspector-list-header">
+              <div class="card-title sub-card-title">当前层级子项</div>
+              <div class="inspector-tip">点击目录可跳转</div>
+            </div>
             <div id="childrenList" class="list-empty">等待结果</div>
           </div>
         </div>
@@ -92,8 +105,9 @@
         <div class="panel-header">
           <div>
             <h2>最近任务</h2>
-            <p>保留最近 20 次分析任务，方便连续测试与回看。</p>
+            <p>保留最近 20 次分析任务，方便连续测试和回看结果。</p>
           </div>
+          <mdui-button id="clearTasksButton" variant="text">清空记录</mdui-button>
         </div>
         <div id="recentTasks" class="recent-empty">还没有分析记录</div>
       </section>

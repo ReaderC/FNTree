@@ -96,6 +96,12 @@ function readSettings() {
   }
 }
 
+function writeSettings(nextSettings) {
+  const normalized = normalizeSettings(nextSettings);
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(normalized, null, 2));
+  return normalized;
+}
+
 function syncSettingsFromEnv() {
   const envPaths = splitPaths(process.env.TRIM_DATA_ACCESSIBLE_PATHS || '');
   if (!envPaths.length && fs.existsSync(SETTINGS_FILE)) {
@@ -223,6 +229,31 @@ async function handleApi(req, res, url) {
     return;
   }
 
+  if (req.method === 'PUT' && url.pathname === '/api/settings') {
+    const body = await readBody(req);
+    const payload = parseJson(body);
+    const current = readSettings();
+    const incomingScanOptions =
+      payload && typeof payload.scanOptions === 'object' ? payload.scanOptions : {};
+
+    const saved = writeSettings({
+      accessiblePaths: current.accessiblePaths,
+      scanOptions: {
+        ...current.scanOptions,
+        ...incomingScanOptions,
+      },
+      updatedAt: new Date().toISOString(),
+    });
+
+    writeJson(res, 200, {
+      ...saved,
+      gduBinary: GDU_BINARY,
+      gduAvailable: fs.existsSync(GDU_BINARY),
+      mockMode: Boolean(GDU_MOCK_FILE),
+    });
+    return;
+  }
+
   if (req.method === 'GET' && url.pathname === '/api/tasks') {
     const recentTasks = Array.from(tasks.values())
       .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
@@ -230,6 +261,27 @@ async function handleApi(req, res, url) {
       .map((task) => taskResponse(task));
     writeJson(res, 200, {
       items: recentTasks,
+    });
+    return;
+  }
+
+  if (req.method === 'DELETE' && url.pathname === '/api/tasks') {
+    let changed = false;
+
+    for (const task of tasks.values()) {
+      if (task.process && task.status === 'running') {
+        task.process.kill('SIGTERM');
+      }
+      changed = true;
+    }
+
+    tasks.clear();
+    if (changed) {
+      persistTasks();
+    }
+
+    writeJson(res, 200, {
+      ok: true,
     });
     return;
   }
@@ -306,13 +358,15 @@ async function handleApi(req, res, url) {
 
     if (task.process && task.status === 'running') {
       task.process.kill('SIGTERM');
-      task.status = 'canceled';
-      task.error = 'Canceled by user.';
-      task.finishedAt = new Date().toISOString();
-      persistTasks();
     }
 
-    writeJson(res, 200, taskResponse(task));
+    tasks.delete(id);
+    persistTasks();
+
+    writeJson(res, 200, {
+      ok: true,
+      id,
+    });
     return;
   }
 
