@@ -25,16 +25,20 @@
           <label class="settings-card settings-card-stack">
             <span class="settings-label">统计方式</span>
             <span class="settings-help">默认使用磁盘占用。切换为表观大小后，会更接近文件名义大小。</span>
-            <select id="settingScanMode" class="native-select native-select-wide">
-              <option value="disk-usage">磁盘占用</option>
-              <option value="apparent-size">表观大小</option>
-            </select>
+            <div id="settingScanMode" class="segmented-control" role="radiogroup" aria-label="统计方式">
+              <button class="segmented-option" type="button" data-value="disk-usage">磁盘占用</button>
+              <button class="segmented-option" type="button" data-value="apparent-size">表观大小</button>
+            </div>
           </label>
 
           <label class="settings-card settings-card-stack">
             <span class="settings-label">前 N 项显示数量</span>
             <span class="settings-help">用于控制默认展示的前 N 个大目录或大文件。</span>
-            <input id="settingTopLimit" class="native-input" type="number" min="1" step="1" placeholder="30">
+            <div class="stepper" aria-label="前 N 项显示数量">
+              <button id="topLimitDecrease" class="stepper-button" type="button" aria-label="减少 1">-1</button>
+              <div id="settingTopLimit" class="stepper-value" aria-live="polite">30</div>
+              <button id="topLimitIncrease" class="stepper-button" type="button" aria-label="增加 1">+1</button>
+            </div>
           </label>
 
           <label class="settings-card settings-card-toggle">

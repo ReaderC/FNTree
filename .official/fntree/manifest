@@ -1,5 +1,5 @@
 appname               = fntree
-version               = 0.1.14
+version               = 0.1.20
 display_name          = FN Tree
 desc                  = Disk usage analyzer for fnOS powered by gdu.
 arch                  = x86_64

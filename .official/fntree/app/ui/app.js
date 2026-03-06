@@ -6,11 +6,15 @@ const state = {
   zoomPath: [],
   selectedPath: null,
   detailLevel: 0,
+  menuOpen: false,
+  historyOpen: false,
+  layoutCache: new Map(),
 };
 
 const pathInput = document.getElementById('pathInput');
 const analyzeButton = document.getElementById('analyzeButton');
-const accessiblePathSelect = document.getElementById('accessiblePathSelect');
+const accessiblePathTrigger = document.getElementById('accessiblePathTrigger');
+const accessiblePathMenu = document.getElementById('accessiblePathMenu');
 const accessiblePathsEmpty = document.getElementById('accessiblePathsEmpty');
 const accessiblePathsList = document.getElementById('accessiblePathsList');
 const taskStatus = document.getElementById('taskStatus');
@@ -20,6 +24,10 @@ const breadcrumbBar = document.getElementById('breadcrumbBar');
 const selectionDetails = document.getElementById('selectionDetails');
 const childrenList = document.getElementById('childrenList');
 const recentTasks = document.getElementById('recentTasks');
+const historyToggleButton = document.getElementById('historyToggleButton');
+const historyCloseButton = document.getElementById('historyCloseButton');
+const historyDrawer = document.getElementById('historyDrawer');
+const historyBackdrop = document.getElementById('historyBackdrop');
 const healthLabel = document.getElementById('healthLabel');
 const gduLabel = document.getElementById('gduLabel');
 const detailLevelLabel = document.getElementById('detailLevelLabel');
@@ -28,6 +36,8 @@ const resetZoomButton = document.getElementById('resetZoomButton');
 const copyPathButton = document.getElementById('copyPathButton');
 const openInFilesButton = document.getElementById('openInFilesButton');
 const clearTasksButton = document.getElementById('clearTasksButton');
+const TREEMAP_MAX_VISIBLE = 24;
+let treemapTooltip = null;
 
 bootstrap().catch((error) => {
   showError(error.message || '初始化失败');
@@ -39,9 +49,24 @@ analyzeButton.addEventListener('click', () => {
   });
 });
 
-accessiblePathSelect.addEventListener('change', () => {
-  if (accessiblePathSelect.value) {
-    pathInput.value = accessiblePathSelect.value;
+accessiblePathTrigger.addEventListener('click', () => {
+  if (!state.accessiblePaths.length) {
+    return;
+  }
+  setPathMenuOpen(!state.menuOpen);
+});
+
+document.addEventListener('click', (event) => {
+  if (!state.menuOpen) {
+    return;
+  }
+  const target = event.target;
+  if (
+    target instanceof Node &&
+    !accessiblePathTrigger.contains(target) &&
+    !accessiblePathMenu.contains(target)
+  ) {
+    setPathMenuOpen(false);
   }
 });
 
@@ -93,6 +118,24 @@ clearTasksButton.addEventListener('click', () => {
   });
 });
 
+historyToggleButton?.addEventListener('click', () => {
+  setHistoryOpen(true);
+});
+
+historyCloseButton?.addEventListener('click', () => {
+  setHistoryOpen(false);
+});
+
+historyBackdrop?.addEventListener('click', () => {
+  setHistoryOpen(false);
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && state.historyOpen) {
+    setHistoryOpen(false);
+  }
+});
+
 window.addEventListener('resize', throttle(renderTreemapOnly, 120));
 treemapView.addEventListener(
   'wheel',
@@ -103,7 +146,7 @@ treemapView.addEventListener(
     }
 
     event.preventDefault();
-    const maxLevel = Math.min(10, Math.max(children.length - 1, 0));
+    const maxLevel = Math.max(children.length - getVisibleTreemapCount(children.length), 0);
     const nextLevel = Math.max(
       0,
       Math.min(maxLevel, state.detailLevel + (event.deltaY > 0 ? 1 : -1)),
@@ -140,31 +183,56 @@ async function bootstrap() {
 
 function renderAccessiblePaths() {
   accessiblePathsList.innerHTML = '';
-  accessiblePathSelect.innerHTML = '<option value="">请选择已授权目录</option>';
+  accessiblePathMenu.innerHTML = '';
 
   if (!state.accessiblePaths.length) {
     accessiblePathsEmpty.textContent = '当前没有授权目录，请先在 FNOS 应用设置里授权。';
+    accessiblePathTrigger.textContent = '请选择已授权目录';
     pathInput.value = '';
     return;
   }
 
   accessiblePathsEmpty.textContent = '';
+
   state.accessiblePaths.forEach((item, index) => {
     const chip = document.createElement('span');
     chip.className = 'chip';
     chip.textContent = item;
     accessiblePathsList.append(chip);
 
-    const option = document.createElement('option');
-    option.value = item;
+    const option = document.createElement('button');
+    option.className = 'path-picker-option';
+    option.type = 'button';
     option.textContent = item;
-    accessiblePathSelect.append(option);
+    option.dataset.path = item;
+    option.addEventListener('click', () => {
+      pathInput.value = item;
+      accessiblePathTrigger.textContent = item;
+      setPathMenuOpen(false);
+    });
+    accessiblePathMenu.append(option);
 
     if (index === 0) {
-      accessiblePathSelect.value = item;
+      accessiblePathTrigger.textContent = item;
       pathInput.value = item;
     }
   });
+}
+
+function setPathMenuOpen(open) {
+  state.menuOpen = open;
+  accessiblePathMenu.hidden = !open;
+  accessiblePathTrigger.classList.toggle('is-open', open);
+}
+
+function setHistoryOpen(open) {
+  state.historyOpen = open;
+  historyDrawer?.classList.toggle('is-open', open);
+  historyDrawer?.setAttribute('aria-hidden', open ? 'false' : 'true');
+  if (historyBackdrop) {
+    historyBackdrop.hidden = !open;
+    historyBackdrop.classList.toggle('is-open', open);
+  }
 }
 
 async function startAnalyze() {
@@ -221,9 +289,9 @@ function renderTask(task) {
   if (task.status === 'failed') {
     taskStatus.textContent = `分析失败: ${task.error || '未知错误'}`;
     treemapView.className = 'treemap-empty';
-    treemapView.innerHTML = `<div class="treemap-empty">${escapeHtml(task.error || '未知错误')}</div>`;
+    treemapView.innerHTML = '<div class="treemap-empty">没有可展示的结果</div>';
     selectionDetails.className = 'selection-empty';
-    selectionDetails.innerHTML = '<div class="selection-empty">没有可展示的结果</div>';
+    selectionDetails.textContent = '没有可展示的结果';
     childrenList.className = 'list-empty';
     childrenList.innerHTML = '<div class="list-empty">没有可展示的结果</div>';
     breadcrumbBar.textContent = '没有结果';
@@ -237,6 +305,7 @@ function renderTask(task) {
     state.zoomPath = [];
     state.selectedPath = state.rootNode?.path || null;
     state.detailLevel = 0;
+    state.layoutCache = new Map();
     renderWorkspace();
     return;
   }
@@ -272,46 +341,137 @@ function renderTreemapOnly() {
   }
 
   treemapView.className = '';
-
   const width = treemapView.clientWidth || 860;
   const height = treemapView.clientHeight || 660;
   const layout = computeSquarifiedTreemap(entries, { x: 0, y: 0, width, height });
   const currentTotal = Math.max(currentNode.size || sumNodeSize(entries), 1);
   detailLevelLabel.textContent = `滚轮细化 ${state.detailLevel}`;
+  patchTreemapNodes(layout, currentTotal);
+}
 
-  treemapView.innerHTML = layout
-    .map((item) => {
-      const node = item.node;
-      const tiny = item.width < 110 || item.height < 70 ? ' tiny' : '';
-      const micro = item.width < 52 || item.height < 36 ? ' micro' : '';
-      const selected = node.path === state.selectedPath ? ' selected' : '';
-      return `
-        <button
-          class="treemap-node${tiny}${micro}${selected}"
-          type="button"
-          data-path="${escapeAttribute(node.path)}"
-          title="${escapeAttribute(`${node.path}\n${formatBytes(node.size)}`)}"
-          style="left:${item.x}px;top:${item.y}px;width:${item.width}px;height:${item.height}px;background:${nodeFill(node, currentTotal)};"
-        >
-          <div class="treemap-node-name">${escapeHtml(node.name)}</div>
-          <div class="treemap-node-meta">${formatPercent(node.size, currentTotal)} / ${formatBytes(node.size)} / ${typeText(node.type)}</div>
-        </button>
-      `;
-    })
-    .join('');
+function patchTreemapNodes(layout, currentTotal) {
+  const nextPaths = new Set(layout.map((item) => item.node.path));
+  const existingNodes = new Map(
+    Array.from(treemapView.querySelectorAll('.treemap-node')).map((element) => [element.dataset.path, element]),
+  );
 
-  treemapView.querySelectorAll('.treemap-node').forEach((element) => {
-    element.addEventListener('click', () => {
-      focusNode(element.dataset.path);
-    });
+  layout.forEach((item) => {
+    const path = item.node.path;
+    let element = existingNodes.get(path);
+    const labelMode = getLabelMode(item);
+    const selected = path === state.selectedPath ? ' selected' : '';
+    const previous = state.layoutCache.get(path);
+
+    if (!element) {
+      element = document.createElement('button');
+      element.type = 'button';
+      element.className = 'treemap-node entering';
+      element.dataset.path = path;
+      element.style.opacity = '0';
+      treemapView.append(element);
+      element.addEventListener('click', () => {
+        focusNode(path);
+      });
+      element.addEventListener('mouseenter', handleTreemapTooltipEnter);
+      element.addEventListener('mousemove', handleTreemapTooltipMove);
+      element.addEventListener('mouseleave', hideTreemapTooltip);
+    }
+
+    element.dataset.path = path;
+    element.className = `treemap-node ${labelMode}${selected}`.trim();
+    element.dataset.tooltip = `${item.node.path}\n${formatBytes(item.node.size)} / ${typeText(item.node.type)}`;
+    element.style.background = nodeFill(item.node, currentTotal);
+    element.innerHTML = renderNodeBody(item.node, item, currentTotal, labelMode);
+
+    if (previous) {
+      element.style.left = `${previous.x}px`;
+      element.style.top = `${previous.y}px`;
+      element.style.width = `${previous.width}px`;
+      element.style.height = `${previous.height}px`;
+      element.style.opacity = '1';
+      requestAnimationFrame(() => {
+        element.style.left = `${item.x}px`;
+        element.style.top = `${item.y}px`;
+        element.style.width = `${item.width}px`;
+        element.style.height = `${item.height}px`;
+        element.style.opacity = '1';
+      });
+    } else {
+      element.style.left = `${item.x}px`;
+      element.style.top = `${item.y}px`;
+      element.style.width = `${item.width}px`;
+      element.style.height = `${item.height}px`;
+      requestAnimationFrame(() => {
+        element.style.opacity = '1';
+      });
+    }
   });
+
+  existingNodes.forEach((element, path) => {
+    if (nextPaths.has(path)) {
+      return;
+    }
+    element.classList.add('leaving');
+    element.style.opacity = '0';
+    element.style.transform = 'scale(0.92)';
+    setTimeout(() => {
+      if (element.parentNode === treemapView) {
+        treemapView.removeChild(element);
+      }
+    }, 220);
+  });
+
+  state.layoutCache = new Map(layout.map((item) => [item.node.path, item]));
+}
+
+function renderNodeBody(node, item, total, labelMode) {
+  const percent = formatPercent(node.size, total);
+  if (labelMode === 'micro') {
+    return '';
+  }
+  if (labelMode === 'tiny') {
+    return `
+      <div class="treemap-node-content">
+        <div class="treemap-node-name">${escapeHtml(node.name)}</div>
+        <div class="treemap-node-meta">${percent}</div>
+      </div>
+    `;
+  }
+  if (labelMode === 'compact') {
+    return `
+      <div class="treemap-node-content">
+        <div class="treemap-node-name">${escapeHtml(node.name)}</div>
+        <div class="treemap-node-meta">${percent}</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="treemap-node-content">
+      <div class="treemap-node-name">${escapeHtml(node.name)}</div>
+      <div class="treemap-node-meta">${percent}</div>
+      <div class="treemap-node-submeta">${formatBytes(node.size)} / ${typeText(node.type)}</div>
+    </div>
+  `;
+}
+
+function getLabelMode(item) {
+  if (item.width < 34 || item.height < 22) {
+    return 'micro';
+  }
+  if (item.width < 68 || item.height < 34) {
+    return 'tiny';
+  }
+  if (item.width < 104 || item.height < 52) {
+    return 'compact';
+  }
+  return 'full';
 }
 
 function renderSelection() {
   const node = getSelectedNode() || getCurrentNode();
   if (!node) {
     selectionDetails.className = 'selection-empty';
-    selectionDetails.innerHTML = '<div class="selection-empty">点击任意块查看详情</div>';
+    selectionDetails.textContent = '点击任意块查看详情';
     return;
   }
 
@@ -321,10 +481,24 @@ function renderSelection() {
     <div class="detail-grid">
       <div class="detail-row"><span>类型</span><span>${typeText(node.type)}</span></div>
       <div class="detail-row"><span>占用</span><span>${formatBytes(node.size)}</span></div>
-      <div class="detail-row"><span>当前层级占比</span><span>${formatPercent(node.size, getCurrentNode()?.size || 0)}</span></div>
+      <div class="detail-row"><span>当前层级占比</span><span>${formatPercent(node.size, getLevelReferenceSize(node))}</span></div>
       <div class="detail-row"><span>子项数</span><span>${formatCount(node)}</span></div>
     </div>
   `;
+}
+
+function getLevelReferenceSize(node) {
+  const currentNode = getCurrentNode();
+  if (!node) {
+    return 0;
+  }
+  if (!currentNode) {
+    return node.size || 0;
+  }
+  if (node.path !== currentNode.path) {
+    return currentNode.size || 0;
+  }
+  return findParentNode(state.rootNode, node.path)?.size || currentNode.size || 0;
 }
 
 function renderChildrenList() {
@@ -392,6 +566,7 @@ function renderBreadcrumb() {
       state.selectedPath = targetPath;
       state.zoomPath = buildPathToNode(state.rootNode, targetPath) || [];
       state.detailLevel = 0;
+      state.layoutCache = new Map();
       renderWorkspace();
     });
   });
@@ -402,10 +577,11 @@ function clearWorkspace() {
   state.zoomPath = [];
   state.selectedPath = null;
   state.detailLevel = 0;
+  state.layoutCache = new Map();
   treemapView.className = 'treemap-empty';
   treemapView.innerHTML = '<div class="treemap-empty">等待结果</div>';
   selectionDetails.className = 'selection-empty';
-  selectionDetails.innerHTML = '<div class="selection-empty">点击任意块查看详情</div>';
+  selectionDetails.textContent = '点击任意块查看详情';
   childrenList.className = 'list-empty';
   childrenList.innerHTML = '<div class="list-empty">等待结果</div>';
   breadcrumbBar.textContent = '等待结果';
@@ -422,6 +598,7 @@ function focusNode(targetPath) {
   if (node.type === 'directory' && node.children?.length) {
     state.zoomPath = buildPathToNode(state.rootNode, node.path) || state.zoomPath;
     state.detailLevel = 0;
+    state.layoutCache = new Map();
   }
   renderWorkspace();
 }
@@ -547,6 +724,22 @@ function findNodeByPath(node, targetPath) {
   return null;
 }
 
+function findParentNode(node, targetPath, parent = null) {
+  if (!node || !targetPath) {
+    return null;
+  }
+  if (node.path === targetPath) {
+    return parent;
+  }
+  for (const child of node.children || []) {
+    const found = findParentNode(child, targetPath, node);
+    if (found || child.path === targetPath) {
+      return found || node;
+    }
+  }
+  return null;
+}
+
 function buildPathToNode(root, targetPath, trail = []) {
   if (!root) {
     return null;
@@ -573,177 +766,208 @@ function computeSquarifiedTreemap(nodes, rect) {
     return [];
   }
 
-  const weights = rebalanceDisplayWeights(cleanNodes, state.detailLevel);
-  const visible = weights.filter((item) => item.weight > 0.002);
+  const hiddenCount = Math.min(state.detailLevel, Math.max(cleanNodes.length - 1, 0));
+  const visibleCount = getVisibleTreemapCount(cleanNodes.length);
+  const visibleNodes = cleanNodes.slice(hiddenCount, hiddenCount + visibleCount);
+  const weights = rebalanceDisplayWeights(visibleNodes);
+  const visible = weights.filter((item) => item.weight > 0.0005);
   const totalWeight = visible.reduce((sum, item) => sum + item.weight, 0);
-  const areaScale = (rect.width * rect.height) / Math.max(totalWeight, 1);
   const items = visible.map((item) => ({
     node: item.node,
-    area: Math.max(item.weight * areaScale, 1),
+    weight: item.weight / Math.max(totalWeight, 1e-9),
   }));
 
-  return squarify(items, [], shortestSide(rect), rect, []);
+  return layoutTreemapBinary(items, rect);
 }
 
-function rebalanceDisplayWeights(nodes, detailLevel) {
+function getVisibleTreemapCount(totalNodes) {
+  return Math.max(10, Math.min(TREEMAP_MAX_VISIBLE, totalNodes));
+}
+
+function rebalanceDisplayWeights(nodes) {
   if (!nodes.length) {
     return [];
   }
 
-  const total = sumNodeSize(nodes);
-  const capRatio = 0.5;
-  const exponent = Math.max(0.36, 1 - detailLevel * 0.1);
-  const raw = nodes.map((node, index) => ({
+  const largestSize = Math.max(nodes[0]?.size || 0, 1);
+  const redistributed = nodes.map((node) => ({
     node,
-    ratio: node.size / Math.max(total, 1),
-    rank: index,
+    weight: Math.max(node.size / largestSize, 0.0015),
   }));
 
-  const transformed = raw.map((item) => {
-    const normalizedRank = raw.length > 1 ? item.rank / (raw.length - 1) : 0;
-    const revealBoost = 1 + normalizedRank * detailLevel * 0.55;
-    const topSuppression = Math.max(0, 1 - (1 - normalizedRank) * detailLevel * 0.22);
-    const weighted = Math.pow(item.ratio, exponent) * revealBoost * topSuppression;
-    return {
-      node: item.node,
-      weighted,
-      rank: item.rank,
-    };
-  });
-
-  const weightedTotal = transformed.reduce((sum, item) => sum + item.weighted, 0);
-  const normalized = transformed.map((item) => ({
-    node: item.node,
-    rank: item.rank,
-    ratio: item.weighted / Math.max(weightedTotal, 1e-9),
-  }));
-
-  let overflow = 0;
-  const capped = normalized.map((item) => {
-    const ratio = Math.min(item.ratio, capRatio);
-    overflow += item.ratio - ratio;
-    return {
-      node: item.node,
-      ratio,
-      rank: item.rank,
-    };
-  });
-
-  const redistributionBase = capped
-    .filter((item) => item.ratio < capRatio)
-    .reduce((sum, item) => sum + item.ratio, 0);
-
-  return capped.map((item) => {
-    let weight = item.ratio;
-    if (item.ratio < capRatio && redistributionBase > 0 && overflow > 0) {
-      weight += (item.ratio / redistributionBase) * overflow;
-    }
-
-    if (detailLevel > 0 && item.rank === 0) {
-      weight *= Math.max(0, 1 - detailLevel * 0.24);
-    } else if (detailLevel > 0 && item.rank === 1) {
-      weight *= Math.max(0, 1 - detailLevel * 0.12);
-    }
-
-    return {
-      node: item.node,
-      weight,
-    };
+  let previousWeight = Number.POSITIVE_INFINITY;
+  return redistributed.map((item, index) => {
+    const maxAllowed = index === 0 ? item.weight : Math.max(previousWeight - 0.0005, 0.0005);
+    const weight = Math.min(item.weight, maxAllowed);
+    previousWeight = weight;
+    return { node: item.node, weight };
   });
 }
 
-function squarify(items, row, sideLength, rect, output) {
-  if (!items.length) {
-    if (!row.length) {
-      return output;
-    }
-    const laid = layoutRow(row, rect);
-    return output.concat(laid.items);
+function layoutTreemapBinary(items, rect) {
+  if (!items.length || rect.width <= 1 || rect.height <= 1) {
+    return [];
   }
 
-  const next = items[0];
-  const tentative = [...row, next];
-
-  if (!row.length || worstRatio(tentative, sideLength) <= worstRatio(row, sideLength)) {
-    return squarify(items.slice(1), tentative, sideLength, rect, output);
+  if (items.length === 1) {
+    return [
+      {
+        node: items[0].node,
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.max(Math.round(rect.width), 1),
+        height: Math.max(Math.round(rect.height), 1),
+      },
+    ];
   }
 
-  const laid = layoutRow(row, rect);
-  return squarify(items, [], shortestSide(laid.remainingRect), laid.remainingRect, output.concat(laid.items));
+  const { firstGroup, secondGroup, firstWeight, totalWeight } = splitItemsByWeight(items);
+  if (!firstGroup.length || !secondGroup.length || totalWeight <= 0) {
+    return layoutTreemapSlice(items, rect);
+  }
+
+  if (rect.width >= rect.height) {
+    const firstWidth = clampSize((rect.width * firstWeight) / totalWeight, rect.width);
+    const secondWidth = Math.max(rect.width - firstWidth, 1);
+    const leftRect = { x: rect.x, y: rect.y, width: firstWidth, height: rect.height };
+    const rightRect = {
+      x: rect.x + firstWidth,
+      y: rect.y,
+      width: secondWidth,
+      height: rect.height,
+    };
+    return [
+      ...layoutTreemapBinary(firstGroup, leftRect),
+      ...layoutTreemapBinary(secondGroup, rightRect),
+    ];
+  }
+
+  const firstHeight = clampSize((rect.height * firstWeight) / totalWeight, rect.height);
+  const secondHeight = Math.max(rect.height - firstHeight, 1);
+  const topRect = { x: rect.x, y: rect.y, width: rect.width, height: firstHeight };
+  const bottomRect = {
+    x: rect.x,
+    y: rect.y + firstHeight,
+    width: rect.width,
+    height: secondHeight,
+  };
+  return [
+    ...layoutTreemapBinary(firstGroup, topRect),
+    ...layoutTreemapBinary(secondGroup, bottomRect),
+  ];
 }
 
-function layoutRow(row, rect) {
-  const rowArea = row.reduce((sum, item) => sum + item.area, 0);
+function splitItemsByWeight(items) {
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+  const target = totalWeight / 2;
+  let running = 0;
+  let splitIndex = 1;
+
+  for (let index = 0; index < items.length - 1; index += 1) {
+    running += items[index].weight;
+    splitIndex = index + 1;
+    if (running >= target) {
+      break;
+    }
+  }
+
+  const firstGroup = items.slice(0, splitIndex);
+  const secondGroup = items.slice(splitIndex);
+  const firstWeight = firstGroup.reduce((sum, item) => sum + item.weight, 0);
+  return { firstGroup, secondGroup, firstWeight, totalWeight };
+}
+
+function layoutTreemapSlice(items, rect) {
+  const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
   const horizontal = rect.width >= rect.height;
-  const items = [];
+  const result = [];
 
   if (horizontal) {
-    const rowHeight = rowArea / rect.width;
     let offsetX = rect.x;
-    row.forEach((item, index) => {
-      const itemWidth =
-        index === row.length - 1 ? rect.x + rect.width - offsetX : item.area / rowHeight;
-      items.push({
+    items.forEach((item, index) => {
+      const nextWidth =
+        index === items.length - 1
+          ? rect.x + rect.width - offsetX
+          : (rect.width * item.weight) / Math.max(totalWeight, 1e-9);
+      result.push({
         node: item.node,
         x: Math.round(offsetX),
         y: Math.round(rect.y),
-        width: Math.max(Math.round(itemWidth), 1),
-        height: Math.max(Math.round(rowHeight), 1),
+        width: Math.max(Math.round(nextWidth), 1),
+        height: Math.max(Math.round(rect.height), 1),
       });
-      offsetX += itemWidth;
+      offsetX += nextWidth;
     });
-
-    return {
-      items,
-      remainingRect: {
-        x: rect.x,
-        y: rect.y + rowHeight,
-        width: rect.width,
-        height: Math.max(rect.height - rowHeight, 0),
-      },
-    };
+    return result;
   }
 
-  const rowWidth = rowArea / rect.height;
   let offsetY = rect.y;
-  row.forEach((item, index) => {
-    const itemHeight =
-      index === row.length - 1 ? rect.y + rect.height - offsetY : item.area / rowWidth;
-    items.push({
+  items.forEach((item, index) => {
+    const nextHeight =
+      index === items.length - 1
+        ? rect.y + rect.height - offsetY
+        : (rect.height * item.weight) / Math.max(totalWeight, 1e-9);
+    result.push({
       node: item.node,
       x: Math.round(rect.x),
       y: Math.round(offsetY),
-      width: Math.max(Math.round(rowWidth), 1),
-      height: Math.max(Math.round(itemHeight), 1),
+      width: Math.max(Math.round(rect.width), 1),
+      height: Math.max(Math.round(nextHeight), 1),
     });
-    offsetY += itemHeight;
+    offsetY += nextHeight;
   });
-
-  return {
-    items,
-    remainingRect: {
-      x: rect.x + rowWidth,
-      y: rect.y,
-      width: Math.max(rect.width - rowWidth, 0),
-      height: rect.height,
-    },
-  };
+  return result;
 }
 
-function worstRatio(row, sideLength) {
-  if (!row.length || !sideLength) {
-    return Number.POSITIVE_INFINITY;
+function clampSize(size, total) {
+  return Math.min(Math.max(Math.round(size), 1), Math.max(Math.round(total) - 1, 1));
+}
+
+function ensureTreemapTooltip() {
+  if (treemapTooltip) {
+    return treemapTooltip;
   }
-  const areas = row.map((item) => item.area);
-  const total = areas.reduce((sum, area) => sum + area, 0);
-  const minArea = Math.min(...areas);
-  const maxArea = Math.max(...areas);
-  const sideSquared = sideLength * sideLength;
-  return Math.max((sideSquared * maxArea) / (total * total), (total * total) / (sideSquared * minArea));
+  treemapTooltip = document.createElement('div');
+  treemapTooltip.className = 'treemap-tooltip';
+  treemapTooltip.hidden = true;
+  document.body.appendChild(treemapTooltip);
+  return treemapTooltip;
 }
 
-function shortestSide(rect) {
-  return Math.max(Math.min(rect.width, rect.height), 1);
+function handleTreemapTooltipEnter(event) {
+  const target = event.currentTarget;
+  if (!(target instanceof HTMLElement)) {
+    return;
+  }
+  const tooltip = ensureTreemapTooltip();
+  tooltip.textContent = target.dataset.tooltip || '';
+  tooltip.hidden = false;
+  positionTreemapTooltip(event);
+}
+
+function handleTreemapTooltipMove(event) {
+  if (!treemapTooltip || treemapTooltip.hidden) {
+    return;
+  }
+  positionTreemapTooltip(event);
+}
+
+function positionTreemapTooltip(event) {
+  const tooltip = ensureTreemapTooltip();
+  const offset = 14;
+  const maxLeft = Math.max(window.innerWidth - tooltip.offsetWidth - 12, 12);
+  const maxTop = Math.max(window.innerHeight - tooltip.offsetHeight - 12, 12);
+  const left = Math.min(event.clientX + offset, maxLeft);
+  const top = Math.min(event.clientY + offset, maxTop);
+  tooltip.style.left = `${left}px`;
+  tooltip.style.top = `${top}px`;
+}
+
+function hideTreemapTooltip() {
+  if (!treemapTooltip) {
+    return;
+  }
+  treemapTooltip.hidden = true;
 }
 
 function sumNodeSize(nodes) {
@@ -835,6 +1059,79 @@ function statusText(status) {
     default:
       return status;
   }
+}
+
+function renderRecentTasks(items) {
+  if (!items.length) {
+    recentTasks.innerHTML = '<div class="recent-empty">还没有分析记录</div>';
+    return;
+  }
+
+  recentTasks.innerHTML = items
+    .map(
+      (item) => `
+        <div class="recent-row">
+          <div class="recent-header">
+            <div class="recent-path">${escapeHtml(item.path)}</div>
+            <div class="status-badge">${statusText(item.status)}</div>
+          </div>
+          <div class="recent-main">
+            <div class="recent-meta">
+              <span class="recent-meta-chip">${escapeHtml(formatDate(item.createdAt))}</span>
+              ${
+                item.error
+                  ? `<span class="recent-meta-chip recent-meta-chip-danger">${escapeHtml(item.error)}</span>`
+                  : ''
+              }
+            </div>
+            <div class="recent-actions">
+              <button class="action-link" type="button" data-path="${escapeAttribute(item.path)}">重新分析</button>
+              <button class="action-link" type="button" data-task-id="${escapeAttribute(item.id)}">查看结果</button>
+              <button class="action-link action-link-danger" type="button" data-delete-id="${escapeAttribute(item.id)}">删除记录</button>
+            </div>
+          </div>
+        </div>
+      `,
+    )
+    .join('');
+
+  recentTasks.querySelectorAll('[data-path]').forEach((button) => {
+    button.addEventListener('click', () => {
+      pathInput.value = button.dataset.path || '';
+      startAnalyze().catch((error) => {
+        showError(error.message || '分析启动失败');
+      });
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-task-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        const task = await fetchJson(`/api/analyze/${button.dataset.taskId}`);
+        state.taskId = task.id;
+        renderTask(task);
+        setHistoryOpen(false);
+      } catch (error) {
+        showError(error.message || '读取任务失败');
+      }
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-delete-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await fetchJson(`/api/analyze/${button.dataset.deleteId}`, { method: 'DELETE' });
+        if (state.taskId === button.dataset.deleteId) {
+          clearWorkspace();
+          state.taskId = null;
+        }
+        await refreshRecentTasks();
+        showMessage('任务记录已删除');
+      } catch (error) {
+        showError(error.message || '删除记录失败');
+      }
+    });
+  });
 }
 
 function formatDate(value) {

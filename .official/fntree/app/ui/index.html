@@ -30,16 +30,18 @@
             <h2>开始分析</h2>
             <p>选择已授权目录并执行扫描，再在 treemap 中查看空间分布。</p>
           </div>
-          <a class="button button-ghost" href="/settings.html">扫描设置</a>
+          <div class="header-actions">
+            <button id="historyToggleButton" class="button button-ghost" type="button">历史记录</button>
+            <a class="button button-ghost" href="/settings.html">扫描设置</a>
+          </div>
         </div>
 
         <div class="search-grid">
-          <label class="field">
+          <div class="field path-picker">
             <span class="field-label">已授权目录</span>
-            <select id="accessiblePathSelect" class="native-select">
-              <option value="">请选择已授权目录</option>
-            </select>
-          </label>
+            <button id="accessiblePathTrigger" class="path-picker-trigger" type="button">请选择已授权目录</button>
+            <div id="accessiblePathMenu" class="path-picker-menu" hidden></div>
+          </div>
           <mdui-text-field id="pathInput" label="分析目录" placeholder="/vol1/media"></mdui-text-field>
           <mdui-button id="analyzeButton" full-width>开始分析</mdui-button>
         </div>
@@ -61,7 +63,7 @@
         <div class="panel-header">
           <div>
             <h2>空间视图</h2>
-            <p>单个大项的可视面积会限制在 50% 以内，剩余空间留给中小项展示，避免只看到一个超大块。</p>
+            <p>视觉大小以当前视图中的最大块为基准分配，其余块按相对比例展示；滚轮可逐步替换进更小的块。</p>
           </div>
           <div id="taskStatus">尚未开始</div>
         </div>
@@ -80,8 +82,8 @@
               <div class="treemap-side">
                 <div id="detailLevelLabel" class="detail-level-label">滚轮细化 0</div>
                 <div class="legend">
-                <span class="legend-chip legend-dir">目录占用</span>
-                <span class="legend-chip legend-file">文件占用</span>
+                  <span class="legend-chip legend-dir">目录占用</span>
+                  <span class="legend-chip legend-file">文件占用</span>
                 </div>
               </div>
             </div>
@@ -103,18 +105,22 @@
           </div>
         </div>
       </section>
-
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>最近任务</h2>
-            <p>保留最近 20 次分析任务，方便连续测试和回看结果。</p>
-          </div>
-          <mdui-button id="clearTasksButton" variant="text">清空记录</mdui-button>
-        </div>
-        <div id="recentTasks" class="recent-empty">还没有分析记录</div>
-      </section>
     </div>
+
+    <div id="historyBackdrop" class="history-backdrop" hidden></div>
+    <aside id="historyDrawer" class="history-drawer" aria-hidden="true">
+      <div class="history-drawer-header">
+        <div>
+          <div class="card-title">历史记录</div>
+          <div class="history-drawer-copy">保留最近 20 次分析任务，方便回看结果和重新分析。</div>
+        </div>
+        <div class="history-drawer-actions">
+          <mdui-button id="clearTasksButton" variant="text">清空记录</mdui-button>
+          <button id="historyCloseButton" class="button button-ghost" type="button">关闭</button>
+        </div>
+      </div>
+      <div id="recentTasks" class="recent-empty">还没有分析记录</div>
+    </aside>
 
     <script src="/app.js"></script>
   </body>

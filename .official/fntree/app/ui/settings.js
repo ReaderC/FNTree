@@ -4,8 +4,15 @@ const settingNoCross = document.getElementById('settingNoCross');
 const settingFollowSymlinks = document.getElementById('settingFollowSymlinks');
 const settingConcurrent = document.getElementById('settingConcurrent');
 const settingTopLimit = document.getElementById('settingTopLimit');
+const topLimitDecrease = document.getElementById('topLimitDecrease');
+const topLimitIncrease = document.getElementById('topLimitIncrease');
 const saveSettingsButton = document.getElementById('saveSettingsButton');
 const settingsStatus = document.getElementById('settingsStatus');
+
+const settingsState = {
+  scanMode: 'disk-usage',
+  topLimit: 30,
+};
 
 bootstrap().catch((error) => {
   showError(error.message || '初始化设置页失败');
@@ -17,21 +24,53 @@ saveSettingsButton.addEventListener('click', () => {
   });
 });
 
+settingScanMode.querySelectorAll('[data-value]').forEach((button) => {
+  button.addEventListener('click', () => {
+    settingsState.scanMode = button.dataset.value || 'disk-usage';
+    renderScanModeButtons();
+  });
+});
+
+topLimitDecrease.addEventListener('click', () => {
+  settingsState.topLimit = Math.max(1, settingsState.topLimit - 1);
+  renderTopLimit();
+});
+
+topLimitIncrease.addEventListener('click', () => {
+  settingsState.topLimit = Math.min(999, settingsState.topLimit + 1);
+  renderTopLimit();
+});
+
 async function bootstrap() {
   const settings = await fetchJson('/api/settings');
   const scanOptions = settings.scanOptions || {};
 
-  settingScanMode.value = scanOptions.scanMode || 'disk-usage';
+  settingsState.scanMode = scanOptions.scanMode || 'disk-usage';
+  settingsState.topLimit = Number(scanOptions.topLimit || 30);
   settingIgnoreHidden.checked = Boolean(scanOptions.ignoreHidden);
   settingNoCross.checked = Boolean(scanOptions.noCross);
   settingFollowSymlinks.checked = Boolean(scanOptions.followSymlinks);
   settingConcurrent.checked = !Boolean(scanOptions.sequential);
-  settingTopLimit.value = String(scanOptions.topLimit || 30);
+
+  renderScanModeButtons();
+  renderTopLimit();
   settingsStatus.textContent = '已加载当前默认设置';
 }
 
+function renderScanModeButtons() {
+  settingScanMode.querySelectorAll('[data-value]').forEach((button) => {
+    const selected = button.dataset.value === settingsState.scanMode;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-checked', selected ? 'true' : 'false');
+  });
+}
+
+function renderTopLimit() {
+  settingTopLimit.textContent = String(settingsState.topLimit);
+}
+
 async function saveSettings() {
-  const topLimit = Number(settingTopLimit.value || 0);
+  const topLimit = Number(settingsState.topLimit || 0);
   if (!Number.isInteger(topLimit) || topLimit <= 0) {
     throw new Error('前 N 项必须是正整数');
   }
@@ -45,7 +84,7 @@ async function saveSettings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         scanOptions: {
-          scanMode: settingScanMode.value || 'disk-usage',
+          scanMode: settingsState.scanMode || 'disk-usage',
           ignoreHidden: Boolean(settingIgnoreHidden.checked),
           noCross: Boolean(settingNoCross.checked),
           followSymlinks: Boolean(settingFollowSymlinks.checked),
