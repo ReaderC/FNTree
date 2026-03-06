@@ -31,6 +31,12 @@
             </select>
           </label>
 
+          <label class="settings-card settings-card-stack">
+            <span class="settings-label">前 N 项显示数量</span>
+            <span class="settings-help">用于控制默认展示的前 N 个大目录或大文件。</span>
+            <input id="settingTopLimit" class="native-input" type="number" min="1" step="1" placeholder="30">
+          </label>
+
           <label class="settings-card settings-card-toggle">
             <span class="settings-copy">
               <span class="settings-label">忽略隐藏目录</span>
@@ -65,12 +71,6 @@
             </span>
             <input id="settingConcurrent" type="checkbox" class="switch-input">
             <span class="switch-ui"></span>
-          </label>
-
-          <label class="settings-card settings-card-stack">
-            <span class="settings-label">前 N 项显示数量</span>
-            <span class="settings-help">用于控制默认展示的前 N 个大目录或大文件。</span>
-            <input id="settingTopLimit" class="native-input" type="number" min="1" step="1" placeholder="30">
           </label>
         </div>
 

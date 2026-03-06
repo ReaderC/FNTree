@@ -5,6 +5,7 @@ const state = {
   rootNode: null,
   zoomPath: [],
   selectedPath: null,
+  detailLevel: 0,
 };
 
 const pathInput = document.getElementById('pathInput');
@@ -21,6 +22,7 @@ const childrenList = document.getElementById('childrenList');
 const recentTasks = document.getElementById('recentTasks');
 const healthLabel = document.getElementById('healthLabel');
 const gduLabel = document.getElementById('gduLabel');
+const detailLevelLabel = document.getElementById('detailLevelLabel');
 const zoomOutButton = document.getElementById('zoomOutButton');
 const resetZoomButton = document.getElementById('resetZoomButton');
 const copyPathButton = document.getElementById('copyPathButton');
@@ -49,12 +51,14 @@ zoomOutButton.addEventListener('click', () => {
   }
   state.zoomPath = state.zoomPath.slice(0, -1);
   state.selectedPath = getCurrentNode()?.path || state.selectedPath;
+  state.detailLevel = 0;
   renderWorkspace();
 });
 
 resetZoomButton.addEventListener('click', () => {
   state.zoomPath = [];
   state.selectedPath = state.rootNode?.path || null;
+  state.detailLevel = 0;
   renderWorkspace();
 });
 
@@ -90,6 +94,30 @@ clearTasksButton.addEventListener('click', () => {
 });
 
 window.addEventListener('resize', throttle(renderTreemapOnly, 120));
+treemapView.addEventListener(
+  'wheel',
+  (event) => {
+    const children = getCurrentNode()?.children?.filter((child) => child.size > 0) || [];
+    if (children.length <= 1) {
+      return;
+    }
+
+    event.preventDefault();
+    const maxLevel = Math.min(10, Math.max(children.length - 1, 0));
+    const nextLevel = Math.max(
+      0,
+      Math.min(maxLevel, state.detailLevel + (event.deltaY > 0 ? 1 : -1)),
+    );
+
+    if (nextLevel === state.detailLevel) {
+      return;
+    }
+
+    state.detailLevel = nextLevel;
+    renderTreemapOnly();
+  },
+  { passive: false },
+);
 
 async function bootstrap() {
   const [health, settings, tasks] = await Promise.all([
@@ -107,6 +135,7 @@ async function bootstrap() {
   renderAccessiblePaths();
   renderScanOptions(settings.scanOptions || {});
   renderRecentTasks(tasks.items || []);
+  clearWorkspace();
 }
 
 function renderAccessiblePaths() {
@@ -120,7 +149,6 @@ function renderAccessiblePaths() {
   }
 
   accessiblePathsEmpty.textContent = '';
-
   state.accessiblePaths.forEach((item, index) => {
     const chip = document.createElement('span');
     chip.className = 'chip';
@@ -192,10 +220,14 @@ async function pollTask() {
 function renderTask(task) {
   if (task.status === 'failed') {
     taskStatus.textContent = `分析失败: ${task.error || '未知错误'}`;
+    treemapView.className = 'treemap-empty';
     treemapView.innerHTML = `<div class="treemap-empty">${escapeHtml(task.error || '未知错误')}</div>`;
+    selectionDetails.className = 'selection-empty';
     selectionDetails.innerHTML = '<div class="selection-empty">没有可展示的结果</div>';
+    childrenList.className = 'list-empty';
     childrenList.innerHTML = '<div class="list-empty">没有可展示的结果</div>';
     breadcrumbBar.textContent = '没有结果';
+    detailLevelLabel.textContent = '滚轮细化 0';
     return;
   }
 
@@ -204,6 +236,7 @@ function renderTask(task) {
     state.rootNode = task.result?.root || null;
     state.zoomPath = [];
     state.selectedPath = state.rootNode?.path || null;
+    state.detailLevel = 0;
     renderWorkspace();
     return;
   }
@@ -221,7 +254,9 @@ function renderWorkspace() {
 function renderTreemapOnly() {
   const currentNode = getCurrentNode();
   if (!currentNode) {
+    treemapView.className = 'treemap-empty';
     treemapView.innerHTML = '<div class="treemap-empty">等待结果</div>';
+    detailLevelLabel.textContent = '滚轮细化 0';
     return;
   }
 
@@ -230,20 +265,25 @@ function renderTreemapOnly() {
     .sort((a, b) => b.size - a.size);
 
   if (!entries.length) {
+    treemapView.className = 'treemap-empty';
     treemapView.innerHTML = '<div class="treemap-empty">当前节点没有可展示的子项</div>';
+    detailLevelLabel.textContent = '滚轮细化 0';
     return;
   }
+
+  treemapView.className = '';
 
   const width = treemapView.clientWidth || 860;
   const height = treemapView.clientHeight || 660;
   const layout = computeSquarifiedTreemap(entries, { x: 0, y: 0, width, height });
   const currentTotal = Math.max(currentNode.size || sumNodeSize(entries), 1);
+  detailLevelLabel.textContent = `滚轮细化 ${state.detailLevel}`;
 
   treemapView.innerHTML = layout
     .map((item) => {
       const node = item.node;
-      const tiny = item.width < 96 || item.height < 62 ? ' tiny' : '';
-      const micro = item.width < 46 || item.height < 30 ? ' micro' : '';
+      const tiny = item.width < 110 || item.height < 70 ? ' tiny' : '';
+      const micro = item.width < 52 || item.height < 36 ? ' micro' : '';
       const selected = node.path === state.selectedPath ? ' selected' : '';
       return `
         <button
@@ -254,7 +294,7 @@ function renderTreemapOnly() {
           style="left:${item.x}px;top:${item.y}px;width:${item.width}px;height:${item.height}px;background:${nodeFill(node, currentTotal)};"
         >
           <div class="treemap-node-name">${escapeHtml(node.name)}</div>
-          <div class="treemap-node-meta">${formatBytes(node.size)} / ${typeText(node.type)}</div>
+          <div class="treemap-node-meta">${formatPercent(node.size, currentTotal)} / ${formatBytes(node.size)} / ${typeText(node.type)}</div>
         </button>
       `;
     })
@@ -270,17 +310,19 @@ function renderTreemapOnly() {
 function renderSelection() {
   const node = getSelectedNode() || getCurrentNode();
   if (!node) {
+    selectionDetails.className = 'selection-empty';
     selectionDetails.innerHTML = '<div class="selection-empty">点击任意块查看详情</div>';
     return;
   }
 
+  selectionDetails.className = '';
   selectionDetails.innerHTML = `
     <div class="selection-meta">${escapeHtml(node.path)}</div>
     <div class="detail-grid">
       <div class="detail-row"><span>类型</span><span>${typeText(node.type)}</span></div>
       <div class="detail-row"><span>占用</span><span>${formatBytes(node.size)}</span></div>
-      <div class="detail-row"><span>当前层级子项数</span><span>${formatCount(node)}</span></div>
-      <div class="detail-row"><span>占根目录比例</span><span>${formatPercent(node.size, state.rootNode?.size || 0)}</span></div>
+      <div class="detail-row"><span>当前层级占比</span><span>${formatPercent(node.size, getCurrentNode()?.size || 0)}</span></div>
+      <div class="detail-row"><span>子项数</span><span>${formatCount(node)}</span></div>
     </div>
   `;
 }
@@ -288,16 +330,19 @@ function renderSelection() {
 function renderChildrenList() {
   const node = getCurrentNode();
   if (!node) {
+    childrenList.className = 'list-empty';
     childrenList.innerHTML = '<div class="list-empty">等待结果</div>';
     return;
   }
 
   const items = (node.children || []).slice().sort((a, b) => b.size - a.size);
   if (!items.length) {
+    childrenList.className = 'list-empty';
     childrenList.innerHTML = '<div class="list-empty">当前层级没有子项</div>';
     return;
   }
 
+  childrenList.className = '';
   childrenList.innerHTML = items
     .map(
       (item) => `
@@ -339,7 +384,15 @@ function renderBreadcrumb() {
 
   breadcrumbBar.querySelectorAll('[data-path]').forEach((button) => {
     button.addEventListener('click', () => {
-      focusNode(button.dataset.path, false);
+      const targetPath = button.dataset.path;
+      const nodeByPath = findNodeByPath(state.rootNode, targetPath);
+      if (!nodeByPath) {
+        return;
+      }
+      state.selectedPath = targetPath;
+      state.zoomPath = buildPathToNode(state.rootNode, targetPath) || [];
+      state.detailLevel = 0;
+      renderWorkspace();
     });
   });
 }
@@ -348,21 +401,27 @@ function clearWorkspace() {
   state.rootNode = null;
   state.zoomPath = [];
   state.selectedPath = null;
+  state.detailLevel = 0;
+  treemapView.className = 'treemap-empty';
   treemapView.innerHTML = '<div class="treemap-empty">等待结果</div>';
+  selectionDetails.className = 'selection-empty';
   selectionDetails.innerHTML = '<div class="selection-empty">点击任意块查看详情</div>';
+  childrenList.className = 'list-empty';
   childrenList.innerHTML = '<div class="list-empty">等待结果</div>';
   breadcrumbBar.textContent = '等待结果';
+  detailLevelLabel.textContent = '滚轮细化 0';
 }
 
-function focusNode(targetPath, zoomDirectories = true) {
+function focusNode(targetPath) {
   const node = findNodeByPath(state.rootNode, targetPath);
   if (!node) {
     return;
   }
 
   state.selectedPath = node.path;
-  if (zoomDirectories && node.type === 'directory' && node.children?.length) {
+  if (node.type === 'directory' && node.children?.length) {
     state.zoomPath = buildPathToNode(state.rootNode, node.path) || state.zoomPath;
+    state.detailLevel = 0;
   }
   renderWorkspace();
 }
@@ -514,10 +573,11 @@ function computeSquarifiedTreemap(nodes, rect) {
     return [];
   }
 
-  const weights = rebalanceDisplayWeights(cleanNodes);
-  const totalWeight = weights.reduce((sum, item) => sum + item.weight, 0);
+  const weights = rebalanceDisplayWeights(cleanNodes, state.detailLevel);
+  const visible = weights.filter((item) => item.weight > 0.002);
+  const totalWeight = visible.reduce((sum, item) => sum + item.weight, 0);
   const areaScale = (rect.width * rect.height) / Math.max(totalWeight, 1);
-  const items = weights.map((item) => ({
+  const items = visible.map((item) => ({
     node: item.node,
     area: Math.max(item.weight * areaScale, 1),
   }));
@@ -525,40 +585,69 @@ function computeSquarifiedTreemap(nodes, rect) {
   return squarify(items, [], shortestSide(rect), rect, []);
 }
 
-function rebalanceDisplayWeights(nodes) {
+function rebalanceDisplayWeights(nodes, detailLevel) {
   if (!nodes.length) {
     return [];
   }
 
   const total = sumNodeSize(nodes);
   const capRatio = 0.5;
-  const raw = nodes.map((node) => ({
+  const exponent = Math.max(0.36, 1 - detailLevel * 0.1);
+  const raw = nodes.map((node, index) => ({
     node,
     ratio: node.size / Math.max(total, 1),
+    rank: index,
   }));
 
-  const capped = raw.map((item) => ({
+  const transformed = raw.map((item) => {
+    const normalizedRank = raw.length > 1 ? item.rank / (raw.length - 1) : 0;
+    const revealBoost = 1 + normalizedRank * detailLevel * 0.55;
+    const topSuppression = Math.max(0, 1 - (1 - normalizedRank) * detailLevel * 0.22);
+    const weighted = Math.pow(item.ratio, exponent) * revealBoost * topSuppression;
+    return {
+      node: item.node,
+      weighted,
+      rank: item.rank,
+    };
+  });
+
+  const weightedTotal = transformed.reduce((sum, item) => sum + item.weighted, 0);
+  const normalized = transformed.map((item) => ({
     node: item.node,
-    ratio: Math.min(item.ratio, capRatio),
+    rank: item.rank,
+    ratio: item.weighted / Math.max(weightedTotal, 1e-9),
   }));
 
-  const used = capped.reduce((sum, item) => sum + item.ratio, 0);
-  const overflow = Math.max(1 - used, 0);
-  const uncappedPool = raw
+  let overflow = 0;
+  const capped = normalized.map((item) => {
+    const ratio = Math.min(item.ratio, capRatio);
+    overflow += item.ratio - ratio;
+    return {
+      node: item.node,
+      ratio,
+      rank: item.rank,
+    };
+  });
+
+  const redistributionBase = capped
     .filter((item) => item.ratio < capRatio)
     .reduce((sum, item) => sum + item.ratio, 0);
 
   return capped.map((item) => {
-    const original = raw.find((rawItem) => rawItem.node === item.node);
-    if (!original) {
-      return { node: item.node, weight: item.ratio };
+    let weight = item.ratio;
+    if (item.ratio < capRatio && redistributionBase > 0 && overflow > 0) {
+      weight += (item.ratio / redistributionBase) * overflow;
     }
-    if (original.ratio >= capRatio || uncappedPool <= 0) {
-      return { node: item.node, weight: item.ratio };
+
+    if (detailLevel > 0 && item.rank === 0) {
+      weight *= Math.max(0, 1 - detailLevel * 0.24);
+    } else if (detailLevel > 0 && item.rank === 1) {
+      weight *= Math.max(0, 1 - detailLevel * 0.12);
     }
+
     return {
       node: item.node,
-      weight: item.ratio + (original.ratio / uncappedPool) * overflow,
+      weight,
     };
   });
 }
@@ -592,7 +681,8 @@ function layoutRow(row, rect) {
     const rowHeight = rowArea / rect.width;
     let offsetX = rect.x;
     row.forEach((item, index) => {
-      const itemWidth = index === row.length - 1 ? rect.x + rect.width - offsetX : item.area / rowHeight;
+      const itemWidth =
+        index === row.length - 1 ? rect.x + rect.width - offsetX : item.area / rowHeight;
       items.push({
         node: item.node,
         x: Math.round(offsetX),
@@ -617,7 +707,8 @@ function layoutRow(row, rect) {
   const rowWidth = rowArea / rect.height;
   let offsetY = rect.y;
   row.forEach((item, index) => {
-    const itemHeight = index === row.length - 1 ? rect.y + rect.height - offsetY : item.area / rowWidth;
+    const itemHeight =
+      index === row.length - 1 ? rect.y + rect.height - offsetY : item.area / rowWidth;
     items.push({
       node: item.node,
       x: Math.round(rect.x),
@@ -700,7 +791,7 @@ function formatBytes(value) {
 
 function formatPercent(value, total) {
   if (!total) {
-    return '0%';
+    return '0.0%';
   }
   return `${((value / total) * 100).toFixed(1)}%`;
 }

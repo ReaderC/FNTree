@@ -216,6 +216,7 @@ h1 {
 .settings-page-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   align-items: start;
+  grid-auto-rows: 1fr;
 }
 
 .field {
@@ -290,6 +291,7 @@ h1 {
 .treemap-toolbar,
 .breadcrumb-actions,
 .legend,
+.treemap-side,
 .inspector-actions,
 .recent-actions,
 .settings-actions,
@@ -461,28 +463,55 @@ h1 {
   background: linear-gradient(145deg, #9fd4f7, #2a7598);
 }
 
+.treemap-side {
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.detail-level-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
 .selection-meta {
-  margin-bottom: 14px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  word-break: break-all;
 }
 
 .detail-grid {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 12px;
+  margin-bottom: 12px;
 }
 
 .detail-row {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 0;
-  border-top: 1px solid rgba(90, 68, 36, 0.08);
+  display: grid;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid rgba(90, 68, 36, 0.08);
+  border-radius: 16px;
+  background: rgba(141, 79, 34, 0.04);
 }
 
-.detail-row:first-child,
+.detail-row:first-child {
+  padding-top: 12px;
+}
+
 .list-row:first-child,
 .recent-row:first-child {
-  border-top: 0;
   padding-top: 0;
+}
+
+.detail-row span:first-child {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 #childrenList,
@@ -494,6 +523,10 @@ h1 {
 #childrenList {
   flex: 1;
   min-height: 0;
+}
+
+#selectionDetails {
+  flex: 0 0 auto;
 }
 
 #recentTasks {
@@ -573,6 +606,7 @@ h1 {
   display: grid;
   gap: 14px;
   min-width: 0;
+  height: 100%;
 }
 
 .settings-card-stack {
@@ -694,6 +728,10 @@ h1 {
   .inspector-list-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .settings-card-toggle {
