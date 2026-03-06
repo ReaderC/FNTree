@@ -8,7 +8,21 @@ const state = {
   detailLevel: 0,
   menuOpen: false,
   historyOpen: false,
+  pathMenuRendered: false,
+  treemapFilter: 'all',
+  treemapMaxVisible: 24,
   layoutCache: new Map(),
+};
+
+const SETTINGS_CACHE_KEY = 'fntree.settings';
+const HEALTH_CACHE_KEY = 'fntree.health';
+const TASKS_CACHE_KEY = 'fntree.tasks';
+const CACHE_TTL_MS = 5 * 60 * 1000;
+const THEME_PRESETS = {
+  cinnamon: { accent: '#8d4f22', soft: '#f2d3b4' },
+  slate: { accent: '#55606f', soft: '#d7dde5' },
+  forest: { accent: '#2f6f4f', soft: '#cde7da' },
+  ocean: { accent: '#2b6e9a', soft: '#cfe5f4' },
 };
 
 const pathInput = document.getElementById('pathInput');
@@ -18,6 +32,7 @@ const accessiblePathMenu = document.getElementById('accessiblePathMenu');
 const accessiblePathsEmpty = document.getElementById('accessiblePathsEmpty');
 const accessiblePathsList = document.getElementById('accessiblePathsList');
 const taskStatus = document.getElementById('taskStatus');
+const taskProgress = document.getElementById('taskProgress');
 const scanOptionsSummary = document.getElementById('scanOptionsSummary');
 const treemapView = document.getElementById('treemapView');
 const breadcrumbBar = document.getElementById('breadcrumbBar');
@@ -36,6 +51,7 @@ const resetZoomButton = document.getElementById('resetZoomButton');
 const copyPathButton = document.getElementById('copyPathButton');
 const openInFilesButton = document.getElementById('openInFilesButton');
 const clearTasksButton = document.getElementById('clearTasksButton');
+const treemapFilter = document.getElementById('treemapFilter');
 const TREEMAP_MAX_VISIBLE = 24;
 let treemapTooltip = null;
 
@@ -53,6 +69,7 @@ accessiblePathTrigger.addEventListener('click', () => {
   if (!state.accessiblePaths.length) {
     return;
   }
+  ensureAccessiblePathMenu();
   setPathMenuOpen(!state.menuOpen);
 });
 
@@ -130,6 +147,16 @@ historyBackdrop?.addEventListener('click', () => {
   setHistoryOpen(false);
 });
 
+treemapFilter?.querySelectorAll('[data-filter]').forEach((button) => {
+  button.addEventListener('click', () => {
+    state.treemapFilter = button.dataset.filter || 'all';
+    renderTreemapFilter();
+    state.detailLevel = 0;
+    state.layoutCache = new Map();
+    renderWorkspace();
+  });
+});
+
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && state.historyOpen) {
     setHistoryOpen(false);
@@ -177,6 +204,7 @@ async function bootstrap() {
   state.accessiblePaths = settings.accessiblePaths || [];
   renderAccessiblePaths();
   renderScanOptions(settings.scanOptions || {});
+  renderTreemapFilter();
   renderRecentTasks(tasks.items || []);
   clearWorkspace();
 }
@@ -184,6 +212,7 @@ async function bootstrap() {
 function renderAccessiblePaths() {
   accessiblePathsList.innerHTML = '';
   accessiblePathMenu.innerHTML = '';
+  state.pathMenuRendered = false;
 
   if (!state.accessiblePaths.length) {
     accessiblePathsEmpty.textContent = '当前没有授权目录，请先在 FNOS 应用设置里授权。';
@@ -194,12 +223,39 @@ function renderAccessiblePaths() {
 
   accessiblePathsEmpty.textContent = '';
 
-  state.accessiblePaths.forEach((item, index) => {
+  state.accessiblePaths.slice(0, 3).forEach((item, index) => {
     const chip = document.createElement('span');
     chip.className = 'chip';
     chip.textContent = item;
     accessiblePathsList.append(chip);
 
+    if (index === 0) {
+      accessiblePathTrigger.textContent = item;
+      pathInput.value = item;
+    }
+  });
+
+  if (state.accessiblePaths.length > 3) {
+    const chip = document.createElement('span');
+    chip.className = 'chip chip-muted';
+    chip.textContent = `共 ${state.accessiblePaths.length} 个授权目录`;
+    accessiblePathsList.append(chip);
+  }
+}
+
+function setPathMenuOpen(open) {
+  state.menuOpen = open;
+  accessiblePathMenu.hidden = !open;
+  accessiblePathTrigger.classList.toggle('is-open', open);
+}
+
+function ensureAccessiblePathMenu() {
+  if (state.pathMenuRendered) {
+    return;
+  }
+
+  accessiblePathMenu.innerHTML = '';
+  state.accessiblePaths.forEach((item) => {
     const option = document.createElement('button');
     option.className = 'path-picker-option';
     option.type = 'button';
@@ -211,18 +267,9 @@ function renderAccessiblePaths() {
       setPathMenuOpen(false);
     });
     accessiblePathMenu.append(option);
-
-    if (index === 0) {
-      accessiblePathTrigger.textContent = item;
-      pathInput.value = item;
-    }
   });
-}
 
-function setPathMenuOpen(open) {
-  state.menuOpen = open;
-  accessiblePathMenu.hidden = !open;
-  accessiblePathTrigger.classList.toggle('is-open', open);
+  state.pathMenuRendered = true;
 }
 
 function setHistoryOpen(open) {
@@ -314,10 +361,12 @@ function renderTask(task) {
 }
 
 function renderWorkspace() {
-  renderTreemapOnly();
   renderSelection();
   renderChildrenList();
   renderBreadcrumb();
+  requestAnimationFrame(() => {
+    renderTreemapOnly();
+  });
 }
 
 function renderTreemapOnly() {
@@ -381,6 +430,7 @@ function patchTreemapNodes(layout, currentTotal) {
     element.className = `treemap-node ${labelMode}${selected}`.trim();
     element.dataset.tooltip = `${item.node.path}\n${formatBytes(item.node.size)} / ${typeText(item.node.type)}`;
     element.style.background = nodeFill(item.node, currentTotal);
+    element.style.borderRadius = `${computeNodeRadius(item)}px`;
     element.innerHTML = renderNodeBody(item.node, item, currentTotal, labelMode);
 
     if (previous) {
@@ -465,6 +515,11 @@ function getLabelMode(item) {
     return 'compact';
   }
   return 'full';
+}
+
+function computeNodeRadius(item) {
+  const shortest = Math.max(Math.min(item.width, item.height), 1);
+  return Math.max(Math.min(shortest * 0.16, 20), 8);
 }
 
 function renderSelection() {
@@ -570,6 +625,10 @@ function renderBreadcrumb() {
       renderWorkspace();
     });
   });
+
+  requestAnimationFrame(() => {
+    breadcrumbBar.scrollLeft = breadcrumbBar.scrollWidth;
+  });
 }
 
 function clearWorkspace() {
@@ -578,6 +637,9 @@ function clearWorkspace() {
   state.selectedPath = null;
   state.detailLevel = 0;
   state.layoutCache = new Map();
+  if (taskProgress) {
+    taskProgress.textContent = '等待扫描任务';
+  }
   treemapView.className = 'treemap-empty';
   treemapView.innerHTML = '<div class="treemap-empty">等待结果</div>';
   selectionDetails.className = 'selection-empty';
@@ -1195,3 +1257,623 @@ async function copyText(value) {
     throw new Error('copy_failed');
   }
 }
+
+function renderTask(task) {
+  if (task.status === 'failed') {
+    taskStatus.textContent = `分析失败: ${task.error || '未知错误'}`;
+    if (taskProgress) {
+      taskProgress.textContent = task.stderr ? lastProgressLine(task.stderr) : '扫描已中断';
+    }
+    treemapView.className = 'treemap-empty';
+    treemapView.innerHTML = '<div class="treemap-empty">没有可展示的结果</div>';
+    selectionDetails.className = 'selection-empty';
+    selectionDetails.textContent = '没有可展示的结果';
+    childrenList.className = 'list-empty';
+    childrenList.innerHTML = '<div class="list-empty">没有可展示的结果</div>';
+    breadcrumbBar.textContent = '没有结果';
+    detailLevelLabel.textContent = '滚轮细化 0';
+    return;
+  }
+
+  if (task.status === 'completed') {
+    taskStatus.textContent = `分析完成: ${task.path}`;
+    if (taskProgress) {
+      taskProgress.textContent = `扫描完成，用时 ${formatDuration(task.startedAt, task.finishedAt)}`;
+    }
+    state.rootNode = task.result?.root || null;
+    state.zoomPath = [];
+    state.selectedPath = state.rootNode?.path || null;
+    state.detailLevel = 0;
+    state.layoutCache = new Map();
+    renderWorkspace();
+    return;
+  }
+
+  taskStatus.textContent = `分析中，已读取 ${formatBytes(task.stdoutBytes || 0)}`;
+  if (taskProgress) {
+    taskProgress.textContent = task.stderr
+      ? lastProgressLine(task.stderr)
+      : `正在扫描，已运行 ${formatDuration(task.startedAt)}`;
+  }
+}
+
+function renderTreemapOnly() {
+  const currentNode = getCurrentNode();
+  if (!currentNode) {
+    treemapView.className = 'treemap-empty';
+    treemapView.innerHTML = '<div class="treemap-empty">等待结果</div>';
+    detailLevelLabel.textContent = '滚轮细化 0';
+    return;
+  }
+
+  const entries = (currentNode.children || [])
+    .filter((child) => matchesTreemapFilter(child))
+    .filter((child) => child.size > 0)
+    .sort((a, b) => b.size - a.size);
+
+  if (!entries.length) {
+    treemapView.className = 'treemap-empty';
+    treemapView.innerHTML = '<div class="treemap-empty">当前筛选下没有可展示的子项</div>';
+    detailLevelLabel.textContent = '滚轮细化 0';
+    return;
+  }
+
+  treemapView.className = '';
+  const width = treemapView.clientWidth || 860;
+  const height = treemapView.clientHeight || 660;
+  const layout = computeSquarifiedTreemap(entries, { x: 0, y: 0, width, height });
+  const currentTotal = Math.max(entries[0]?.size || sumNodeSize(entries), 1);
+  detailLevelLabel.textContent = `滚轮细化 ${state.detailLevel}`;
+  patchTreemapNodes(layout, currentTotal);
+}
+
+function renderChildrenList() {
+  const node = getCurrentNode();
+  if (!node) {
+    childrenList.className = 'list-empty';
+    childrenList.innerHTML = '<div class="list-empty">等待结果</div>';
+    return;
+  }
+
+  const items = (node.children || [])
+    .filter((child) => matchesTreemapFilter(child))
+    .slice()
+    .sort((a, b) => b.size - a.size);
+
+  if (!items.length) {
+    childrenList.className = 'list-empty';
+    childrenList.innerHTML = '<div class="list-empty">当前筛选下没有子项</div>';
+    return;
+  }
+
+  childrenList.className = '';
+  childrenList.innerHTML = items
+    .map(
+      (item) => `
+        <button class="list-row interactive-row" type="button" data-path="${escapeAttribute(item.path)}">
+          <div class="list-main">
+            <div class="list-path">${escapeHtml(item.name)}</div>
+            <div class="list-size">${formatBytes(item.size)}</div>
+          </div>
+          <div class="list-meta">${typeText(item.type)} / ${formatCount(item)}</div>
+        </button>
+      `,
+    )
+    .join('');
+
+  childrenList.querySelectorAll('[data-path]').forEach((button) => {
+    button.addEventListener('click', () => {
+      focusNode(button.dataset.path);
+    });
+  });
+}
+
+function renderTreemapFilter() {
+  treemapFilter?.querySelectorAll('[data-filter]').forEach((button) => {
+    const selected = button.dataset.filter === state.treemapFilter;
+    button.classList.toggle('is-selected', selected);
+    button.setAttribute('aria-checked', selected ? 'true' : 'false');
+  });
+}
+
+function matchesTreemapFilter(node) {
+  if (state.treemapFilter === 'directory') {
+    return node.type === 'directory';
+  }
+  if (state.treemapFilter === 'file') {
+    return node.type === 'file';
+  }
+  return true;
+}
+
+function formatDuration(startedAt, finishedAt) {
+  if (!startedAt) {
+    return '0 秒';
+  }
+  const start = Date.parse(startedAt);
+  const end = finishedAt ? Date.parse(finishedAt) : Date.now();
+  if (Number.isNaN(start) || Number.isNaN(end)) {
+    return '-';
+  }
+  const totalSeconds = Math.max(Math.round((end - start) / 1000), 0);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes <= 0) {
+    return `${seconds} 秒`;
+  }
+  return `${minutes} 分 ${seconds} 秒`;
+}
+
+function lastProgressLine(stderr) {
+  const lines = String(stderr || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  return lines[lines.length - 1] || '正在扫描';
+}
+
+function renderRecentTasks(items) {
+  if (!items.length) {
+    recentTasks.innerHTML = '<div class="recent-empty">还没有分析记录</div>';
+    return;
+  }
+
+  recentTasks.innerHTML = items
+    .map(
+      (item) => `
+        <div class="recent-row">
+          <div class="recent-header">
+            <div class="recent-path">${escapeHtml(item.path)}</div>
+            <div class="status-badge">${statusText(item.status)}</div>
+          </div>
+          <div class="recent-main">
+            <div class="recent-meta">
+              <span class="recent-meta-chip">${escapeHtml(formatDate(item.createdAt))}</span>
+              ${
+                item.error
+                  ? `<span class="recent-meta-chip recent-meta-chip-danger">${escapeHtml(item.error)}</span>`
+                  : ''
+              }
+            </div>
+            <div class="recent-actions">
+              <button class="action-link" type="button" data-path="${escapeAttribute(item.path)}">重新分析</button>
+              <button class="action-link" type="button" data-task-id="${escapeAttribute(item.id)}">查看结果</button>
+              <button class="action-link action-link-danger" type="button" data-delete-id="${escapeAttribute(item.id)}">删除记录</button>
+            </div>
+          </div>
+        </div>
+      `,
+    )
+    .join('');
+
+  recentTasks.querySelectorAll('[data-path]').forEach((button) => {
+    button.addEventListener('click', () => {
+      pathInput.value = button.dataset.path || '';
+      startAnalyze().catch((error) => {
+        showError(error.message || '分析启动失败');
+      });
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-task-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        const task = await fetchJson(`/api/analyze/${button.dataset.taskId}`);
+        state.taskId = task.id;
+        renderTask(task);
+        setHistoryOpen(false);
+      } catch (error) {
+        showError(error.message || '读取任务失败');
+      }
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-delete-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await fetchJson(`/api/analyze/${button.dataset.deleteId}`, { method: 'DELETE' });
+        if (state.taskId === button.dataset.deleteId) {
+          clearWorkspace();
+          state.taskId = null;
+        }
+        await refreshRecentTasks();
+        showMessage('任务记录已删除');
+      } catch (error) {
+        showError(error.message || '删除记录失败');
+      }
+    });
+  });
+}
+function renderRecentTasks(items) {
+  if (!items.length) {
+    recentTasks.innerHTML = '<div class="recent-empty">还没有分析记录</div>';
+    writeCacheItem(TASKS_CACHE_KEY, { items: [] });
+    return;
+  }
+
+  recentTasks.innerHTML = items
+    .map(
+      (item) => `
+        <div class="recent-row">
+          <div class="recent-header">
+            <div class="recent-path">${escapeHtml(item.path)}</div>
+            <div class="status-badge">${statusText(item.status)}</div>
+          </div>
+          <div class="recent-main">
+            <div class="recent-meta">
+              <span class="recent-meta-chip">${escapeHtml(formatDate(item.createdAt))}</span>
+              ${
+                item.error
+                  ? `<span class="recent-meta-chip recent-meta-chip-danger">${escapeHtml(item.error)}</span>`
+                  : ''
+              }
+            </div>
+            <div class="recent-actions">
+              <button class="action-link" type="button" data-path="${escapeAttribute(item.path)}">重新分析</button>
+              <button class="action-link" type="button" data-task-id="${escapeAttribute(item.id)}">查看结果</button>
+              <button class="action-link action-link-danger" type="button" data-delete-id="${escapeAttribute(item.id)}">删除记录</button>
+            </div>
+          </div>
+        </div>
+      `,
+    )
+    .join('');
+
+  recentTasks.querySelectorAll('[data-path]').forEach((button) => {
+    button.addEventListener('click', () => {
+      pathInput.value = button.dataset.path || '';
+      startAnalyze().catch((error) => {
+        showError(error.message || '分析启动失败');
+      });
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-task-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        const task = await fetchJson(`/api/analyze/${button.dataset.taskId}`);
+        state.taskId = task.id;
+        renderTask(task);
+        setHistoryOpen(false);
+      } catch (error) {
+        showError(error.message || '读取任务失败');
+      }
+    });
+  });
+
+  recentTasks.querySelectorAll('[data-delete-id]').forEach((button) => {
+    button.addEventListener('click', async () => {
+      try {
+        await fetchJson(`/api/analyze/${button.dataset.deleteId}`, { method: 'DELETE' });
+        if (state.taskId === button.dataset.deleteId) {
+          clearWorkspace();
+          state.taskId = null;
+        }
+        await refreshRecentTasks();
+        showMessage('任务记录已删除');
+      } catch (error) {
+        showError(error.message || '删除记录失败');
+      }
+    });
+  });
+
+  writeCacheItem(TASKS_CACHE_KEY, { items });
+}
+
+async function bootstrap() {
+  const cachedSettings = readCacheItem(SETTINGS_CACHE_KEY);
+  const cachedHealth = readCacheItem(HEALTH_CACHE_KEY, CACHE_TTL_MS);
+  const cachedTasks = readCacheItem(TASKS_CACHE_KEY, CACHE_TTL_MS);
+
+  if (cachedSettings || cachedHealth || cachedTasks) {
+    hydrateDashboard({
+      settings: cachedSettings,
+      health: cachedHealth,
+      tasks: cachedTasks,
+    });
+  } else {
+    clearWorkspace();
+  }
+
+  const [healthResult, settingsResult, tasksResult] = await Promise.allSettled([
+    fetchJson('/api/health'),
+    fetchJson('/api/settings'),
+    fetchJson('/api/tasks'),
+  ]);
+
+  const health = healthResult.status === 'fulfilled' ? healthResult.value : cachedHealth;
+  const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : cachedSettings;
+  const tasks = tasksResult.status === 'fulfilled' ? tasksResult.value : cachedTasks;
+
+  if (!settings) {
+    throw new Error('读取设置失败');
+  }
+
+  hydrateDashboard({ settings, health, tasks });
+}
+
+function hydrateDashboard({ settings, health, tasks }) {
+  if (settings) {
+    state.accessiblePaths = settings.accessiblePaths || [];
+    state.treemapMaxVisible = Number(settings.scanOptions?.treemapMaxVisible || 24);
+    applyTheme(settings.theme || 'cinnamon');
+    renderAccessiblePaths();
+    renderScanOptions(settings.scanOptions || {});
+    writeCacheItem(SETTINGS_CACHE_KEY, settings);
+  }
+
+  if (health) {
+    healthLabel.textContent = health.ok ? '服务正常' : '服务异常';
+    if (settings?.gduBinary) {
+      gduLabel.textContent = health.gduAvailable
+        ? `gdu 已就绪 · ${settings.gduBinary}`
+        : `缺少 gdu · ${settings.gduBinary}`;
+    }
+    writeCacheItem(HEALTH_CACHE_KEY, health);
+  }
+
+  renderTreemapFilter();
+
+  if (Array.isArray(tasks?.items)) {
+    renderRecentTasks(tasks.items);
+  }
+
+  if (!state.rootNode) {
+    clearWorkspace();
+  }
+}
+
+function applyTheme(themeName) {
+  const preset = THEME_PRESETS[themeName] || THEME_PRESETS.cinnamon;
+  const root = document.documentElement;
+  const accentRgb = hexToRgb(preset.accent);
+  const panelMix = mix('#fffaf4', preset.soft, 0.34);
+  const panelStrong = mix('#ffffff', preset.soft, 0.18);
+  root.style.setProperty('--accent', preset.accent);
+  root.style.setProperty('--accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
+  root.style.setProperty('--accent-soft', preset.soft);
+  root.style.setProperty('--panel-bg', withAlpha(panelMix, 0.88));
+  root.style.setProperty('--panel-border', withAlpha(preset.accent, 0.12));
+  root.style.setProperty('--shadow', `0 18px 60px ${withAlpha(preset.accent, 0.12)}`);
+  root.style.setProperty('--accent-faint', withAlpha(preset.accent, 0.03));
+  root.style.setProperty('--accent-soft-bg', withAlpha(preset.accent, 0.08));
+  root.style.setProperty('--accent-soft-bg-strong', withAlpha(preset.accent, 0.1));
+  root.style.setProperty('--accent-soft-bg-muted', withAlpha(preset.accent, 0.05));
+  root.style.setProperty('--accent-selected-start', withAlpha(preset.accent, 0.92));
+  root.style.setProperty('--accent-selected-end', withAlpha(mix('#000000', preset.accent, 0.76), 0.92));
+  root.style.setProperty('--accent-outline', withAlpha(preset.accent, 0.18));
+  root.style.setProperty('--accent-border-strong', withAlpha(preset.accent, 0.42));
+  root.style.setProperty('--card-glow', withAlpha(preset.accent, 0.22));
+  root.style.setProperty('--scrollbar-track', withAlpha(preset.accent, 0.08));
+  root.style.setProperty('--scrollbar-thumb-start', withAlpha(preset.accent, 0.72));
+  root.style.setProperty('--scrollbar-thumb-end', withAlpha(mix('#000000', preset.accent, 0.62), 0.72));
+  root.style.setProperty('--treemap-surface-start', withAlpha(panelStrong, 0.84));
+  root.style.setProperty('--treemap-surface-mid', withAlpha(mix('#fff4e3', preset.soft, 0.44), 0.68));
+  root.style.setProperty('--treemap-surface-end', withAlpha(panelMix, 0.96));
+  root.style.setProperty('--switch-off-bg', withAlpha(preset.accent, 0.2));
+  root.style.setProperty('--switch-on-bg', withAlpha(preset.accent, 0.72));
+  root.style.setProperty(
+    '--page-bg',
+    `linear-gradient(180deg, ${mix('#ffffff', preset.soft, 0.28)} 0%, ${mix(
+      '#f4ecdf',
+      preset.soft,
+      0.42,
+    )} 46%, ${mix('#e5dbc5', preset.soft, 0.24)} 100%)`,
+  );
+
+  if (window.mdui?.setColorScheme) {
+    window.mdui.setColorScheme(preset.accent);
+  }
+}
+
+function readCacheItem(key, ttlMs = 0) {
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') {
+      return null;
+    }
+    if (ttlMs && parsed.updatedAt && Date.now() - parsed.updatedAt > ttlMs) {
+      return null;
+    }
+    return parsed.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCacheItem(key, value) {
+  try {
+    window.localStorage.setItem(
+      key,
+      JSON.stringify({
+        updatedAt: Date.now(),
+        value,
+      }),
+    );
+  } catch {
+    // Ignore cache failures.
+  }
+}
+
+function mix(baseHex, accentHex, amount) {
+  const base = hexToRgb(baseHex);
+  const accent = hexToRgb(accentHex);
+  const ratio = Math.max(0, Math.min(1, amount));
+  return rgbToHex({
+    r: Math.round(base.r + (accent.r - base.r) * ratio),
+    g: Math.round(base.g + (accent.g - base.g) * ratio),
+    b: Math.round(base.b + (accent.b - base.b) * ratio),
+  });
+}
+
+function withAlpha(hex, alpha) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function hexToRgb(hex) {
+  const clean = String(hex || '')
+    .trim()
+    .replace('#', '');
+  const normalized =
+    clean.length === 3
+      ? clean
+          .split('')
+          .map((char) => `${char}${char}`)
+          .join('')
+      : clean;
+  const value = Number.parseInt(normalized, 16);
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255,
+  };
+}
+
+function rgbToHex({ r, g, b }) {
+  return `#${[r, g, b]
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')}`;
+}
+
+function renderTreemapOnly() {
+  const currentNode = getCurrentNode();
+  if (!currentNode) {
+    treemapView.className = 'treemap-empty';
+    treemapView.innerHTML = '<div class="treemap-empty">等待结果</div>';
+    detailLevelLabel.textContent = '滚轮细化 0';
+    return;
+  }
+
+  const entries = (currentNode.children || [])
+    .filter((child) => matchesTreemapFilter(child))
+    .filter((child) => child.size > 0)
+    .sort((a, b) => b.size - a.size);
+
+  if (!entries.length) {
+    treemapView.className = 'treemap-empty';
+    treemapView.innerHTML = '<div class="treemap-empty">当前筛选下没有可展示的子项</div>';
+    detailLevelLabel.textContent = '滚轮细化 0';
+    return;
+  }
+
+  treemapView.className = '';
+  const width = treemapView.clientWidth || 860;
+  const height = treemapView.clientHeight || 660;
+  const layout = computeSquarifiedTreemap(entries, { x: 0, y: 0, width, height });
+  const visualTotal = Math.max(entries[0]?.size || sumNodeSize(entries), 1);
+  const labelTotal = Math.max(currentNode.size || sumNodeSize(entries), 1);
+  detailLevelLabel.textContent = `滚轮细化 ${state.detailLevel}`;
+  patchTreemapNodes(layout, visualTotal, labelTotal);
+}
+
+function patchTreemapNodes(layout, visualTotal, labelTotal) {
+  const nextPaths = new Set(layout.map((item) => item.node.path));
+  const existingNodes = new Map(
+    Array.from(treemapView.querySelectorAll('.treemap-node')).map((element) => [element.dataset.path, element]),
+  );
+
+  layout.forEach((item) => {
+    const path = item.node.path;
+    let element = existingNodes.get(path);
+    const labelMode = getLabelMode(item);
+    const selected = path === state.selectedPath ? ' selected' : '';
+    const previous = state.layoutCache.get(path);
+
+    if (!element) {
+      element = document.createElement('button');
+      element.type = 'button';
+      element.className = 'treemap-node entering';
+      element.dataset.path = path;
+      element.style.opacity = '0';
+      treemapView.append(element);
+      element.addEventListener('click', () => {
+        focusNode(path);
+      });
+      element.addEventListener('mouseenter', handleTreemapTooltipEnter);
+      element.addEventListener('mousemove', handleTreemapTooltipMove);
+      element.addEventListener('mouseleave', hideTreemapTooltip);
+    }
+
+    element.dataset.path = path;
+    element.className = `treemap-node ${labelMode}${selected}`.trim();
+    element.dataset.tooltip = `${item.node.path}\n${formatBytes(item.node.size)} / ${typeText(item.node.type)}`;
+    element.style.background = nodeFill(item.node, visualTotal);
+    element.style.borderRadius = `${computeNodeRadius(item)}px`;
+    element.innerHTML = renderNodeBody(item.node, item, labelTotal, labelMode);
+
+    if (previous) {
+      element.style.left = `${previous.x}px`;
+      element.style.top = `${previous.y}px`;
+      element.style.width = `${previous.width}px`;
+      element.style.height = `${previous.height}px`;
+      element.style.opacity = '1';
+      requestAnimationFrame(() => {
+        element.style.left = `${item.x}px`;
+        element.style.top = `${item.y}px`;
+        element.style.width = `${item.width}px`;
+        element.style.height = `${item.height}px`;
+        element.style.opacity = '1';
+      });
+    } else {
+      element.style.left = `${item.x}px`;
+      element.style.top = `${item.y}px`;
+      element.style.width = `${item.width}px`;
+      element.style.height = `${item.height}px`;
+      requestAnimationFrame(() => {
+        element.style.opacity = '1';
+      });
+    }
+  });
+
+  existingNodes.forEach((element, path) => {
+    if (nextPaths.has(path)) {
+      return;
+    }
+    element.classList.add('leaving');
+    element.style.opacity = '0';
+    element.style.transform = 'scale(0.92)';
+    setTimeout(() => {
+      if (element.parentNode === treemapView) {
+        treemapView.removeChild(element);
+      }
+    }, 220);
+  });
+
+  state.layoutCache = new Map(layout.map((item) => [item.node.path, item]));
+}
+
+function renderScanOptions(scanOptions) {
+  const labels = [];
+  labels.push(scanOptions.scanMode === 'apparent-size' ? '表观大小' : '磁盘占用');
+  labels.push(scanOptions.ignoreHidden ? '忽略隐藏目录' : '包含隐藏目录');
+  labels.push(scanOptions.noCross ? '不跨文件系统' : '允许跨文件系统');
+  labels.push(scanOptions.followSymlinks ? '跟随符号链接' : '不跟随符号链接');
+  labels.push(scanOptions.sequential ? '顺序扫描' : '并发扫描');
+  labels.push(`前 ${scanOptions.topLimit || 30} 项`);
+  labels.push(`Treemap 最多 ${scanOptions.treemapMaxVisible || 24} 块`);
+  scanOptionsSummary.textContent = labels.join(' / ');
+}
+
+function getVisibleTreemapCount(totalNodes) {
+  const configured = Number(state.treemapMaxVisible || 24);
+  const visibleLimit = Math.max(5, Math.min(30, configured));
+  return Math.max(5, Math.min(visibleLimit, totalNodes));
+}
+
+breadcrumbBar.addEventListener(
+  'wheel',
+  (event) => {
+    if (Math.abs(event.deltaY) < Math.abs(event.deltaX) && Math.abs(event.deltaX) < 1) {
+      return;
+    }
+    event.preventDefault();
+    const delta = Math.abs(event.deltaY) > Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+    breadcrumbBar.scrollLeft += delta;
+  },
+  { passive: false },
+);

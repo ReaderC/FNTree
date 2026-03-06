@@ -2,7 +2,10 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no"
+    >
     <meta name="renderer" content="webkit">
     <title>FN Tree 设置</title>
     <link rel="stylesheet" href="/vendor/mdui/mdui.css">
@@ -16,12 +19,23 @@
           <div>
             <div class="eyebrow">FN Tree Settings</div>
             <h1 class="settings-title">扫描设置</h1>
-            <p>这些配置会作为默认扫描参数保存，后续分析直接沿用。</p>
+            <p>这些配置会作为默认扫描参数保存，后续分析会直接沿用。</p>
           </div>
           <a class="button button-ghost" href="/">返回分析页</a>
         </div>
 
         <div class="settings-page-grid">
+          <label class="settings-card settings-card-stack">
+            <span class="settings-label">主题色</span>
+            <span class="settings-help">统一按钮、输入框、强调色和 mdui 组件的主色调。</span>
+            <div id="settingTheme" class="segmented-control" role="radiogroup" aria-label="主题色">
+              <button class="segmented-option" type="button" data-value="cinnamon">暖棕</button>
+              <button class="segmented-option" type="button" data-value="slate">石墨</button>
+              <button class="segmented-option" type="button" data-value="forest">森林</button>
+              <button class="segmented-option" type="button" data-value="ocean">海蓝</button>
+            </div>
+          </label>
+
           <label class="settings-card settings-card-stack">
             <span class="settings-label">统计方式</span>
             <span class="settings-help">默认使用磁盘占用。切换为表观大小后，会更接近文件名义大小。</span>
@@ -35,9 +49,57 @@
             <span class="settings-label">前 N 项显示数量</span>
             <span class="settings-help">用于控制默认展示的前 N 个大目录或大文件。</span>
             <div class="stepper" aria-label="前 N 项显示数量">
-              <button id="topLimitDecrease" class="stepper-button" type="button" aria-label="减少 1">-1</button>
-              <div id="settingTopLimit" class="stepper-value" aria-live="polite">30</div>
-              <button id="topLimitIncrease" class="stepper-button" type="button" aria-label="增加 1">+1</button>
+              <button id="topLimitDecrease" class="stepper-button" type="button" aria-label="减少 1">
+                -1
+              </button>
+              <input
+                id="settingTopLimit"
+                class="stepper-input"
+                type="number"
+                min="1"
+                max="999"
+                step="1"
+                inputmode="numeric"
+                value="30"
+                aria-label="前 N 项显示数量"
+              >
+              <button id="topLimitIncrease" class="stepper-button" type="button" aria-label="增加 1">
+                +1
+              </button>
+            </div>
+          </label>
+
+          <label class="settings-card settings-card-stack">
+            <span class="settings-label">Treemap 最大显示块数</span>
+            <span class="settings-help">控制 treemap 一次最多展示多少个块，范围 5 到 30。</span>
+            <div class="stepper" aria-label="Treemap 最大显示块数">
+              <button
+                id="treemapVisibleDecrease"
+                class="stepper-button"
+                type="button"
+                aria-label="减少 1"
+              >
+                -1
+              </button>
+              <input
+                id="settingTreemapVisible"
+                class="stepper-input"
+                type="number"
+                min="5"
+                max="30"
+                step="1"
+                inputmode="numeric"
+                value="24"
+                aria-label="Treemap 最大显示块数"
+              >
+              <button
+                id="treemapVisibleIncrease"
+                class="stepper-button"
+                type="button"
+                aria-label="增加 1"
+              >
+                +1
+              </button>
             </div>
           </label>
 

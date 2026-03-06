@@ -124,6 +124,7 @@ function syncSettingsFromEnv() {
 function defaultSettings() {
   return {
     accessiblePaths: [],
+    theme: 'cinnamon',
     scanOptions: {
       scanMode: 'disk-usage',
       ignoreHidden: true,
@@ -131,6 +132,7 @@ function defaultSettings() {
       noCross: true,
       sequential: false,
       topLimit: 30,
+      treemapMaxVisible: 24,
     },
     updatedAt: null,
   };
@@ -139,10 +141,12 @@ function defaultSettings() {
 function normalizeSettings(settings) {
   const defaults = defaultSettings();
   const scanOptions = settings && typeof settings.scanOptions === 'object' ? settings.scanOptions : {};
+  const allowedThemes = new Set(['cinnamon', 'slate', 'forest', 'ocean']);
   return {
     accessiblePaths: Array.isArray(settings?.accessiblePaths)
       ? settings.accessiblePaths.filter((item) => typeof item === 'string' && item.trim())
       : defaults.accessiblePaths,
+    theme: allowedThemes.has(settings?.theme) ? settings.theme : defaults.theme,
     scanOptions: {
       scanMode: scanOptions.scanMode === 'apparent-size' ? 'apparent-size' : 'disk-usage',
       ignoreHidden: toBoolean(scanOptions.ignoreHidden, defaults.scanOptions.ignoreHidden),
@@ -150,6 +154,12 @@ function normalizeSettings(settings) {
       noCross: toBoolean(scanOptions.noCross, defaults.scanOptions.noCross),
       sequential: toBoolean(scanOptions.sequential, defaults.scanOptions.sequential),
       topLimit: normalizePositiveInteger(scanOptions.topLimit, defaults.scanOptions.topLimit),
+      treemapMaxVisible: normalizeBoundedInteger(
+        scanOptions.treemapMaxVisible,
+        defaults.scanOptions.treemapMaxVisible,
+        5,
+        30,
+      ),
     },
     updatedAt: settings?.updatedAt || defaults.updatedAt,
   };
@@ -174,6 +184,15 @@ function toBoolean(value, fallback) {
 function normalizePositiveInteger(value, fallback) {
   const parsed = Number(value);
   if (Number.isInteger(parsed) && parsed > 0) {
+    return parsed;
+  }
+
+  return fallback;
+}
+
+function normalizeBoundedInteger(value, fallback, min, max) {
+  const parsed = Number(value);
+  if (Number.isInteger(parsed) && parsed >= min && parsed <= max) {
     return parsed;
   }
 
@@ -238,6 +257,7 @@ async function handleApi(req, res, url) {
 
     const saved = writeSettings({
       accessiblePaths: current.accessiblePaths,
+      theme: payload?.theme || current.theme,
       scanOptions: {
         ...current.scanOptions,
         ...incomingScanOptions,

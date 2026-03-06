@@ -5,8 +5,26 @@
   --text-main: #24190c;
   --text-muted: #65533c;
   --accent: #8d4f22;
+  --accent-rgb: 141, 79, 34;
   --accent-soft: #f2d3b4;
   --shadow: 0 18px 60px rgba(58, 40, 15, 0.12);
+  --accent-faint: rgba(var(--accent-rgb), 0.03);
+  --accent-soft-bg: rgba(var(--accent-rgb), 0.08);
+  --accent-soft-bg-strong: rgba(var(--accent-rgb), 0.1);
+  --accent-soft-bg-muted: rgba(var(--accent-rgb), 0.05);
+  --accent-selected-start: rgba(var(--accent-rgb), 0.92);
+  --accent-selected-end: rgba(var(--accent-rgb), 0.76);
+  --accent-outline: rgba(var(--accent-rgb), 0.18);
+  --accent-border-strong: rgba(var(--accent-rgb), 0.42);
+  --card-glow: rgba(var(--accent-rgb), 0.22);
+  --scrollbar-track: rgba(var(--accent-rgb), 0.08);
+  --scrollbar-thumb-start: rgba(var(--accent-rgb), 0.72);
+  --scrollbar-thumb-end: rgba(var(--accent-rgb), 0.54);
+  --treemap-surface-start: rgba(255, 244, 227, 0.8);
+  --treemap-surface-mid: rgba(248, 240, 226, 0.55);
+  --treemap-surface-end: rgba(244, 237, 229, 0.95);
+  --switch-off-bg: rgba(var(--accent-rgb), 0.2);
+  --switch-on-bg: rgba(var(--accent-rgb), 0.72);
 }
 
 * {
@@ -14,7 +32,7 @@
 }
 
 html {
-  scrollbar-color: rgba(141, 79, 34, 0.55) rgba(141, 79, 34, 0.12);
+  scrollbar-color: var(--scrollbar-thumb-start) var(--scrollbar-track);
   scrollbar-width: thin;
 }
 
@@ -39,7 +57,7 @@ body::-webkit-scrollbar-track,
 #childrenList::-webkit-scrollbar-track,
 #recentTasks::-webkit-scrollbar-track,
 .path-picker-menu::-webkit-scrollbar-track {
-  background: rgba(141, 79, 34, 0.08);
+  background: var(--scrollbar-track);
   border-radius: 999px;
 }
 
@@ -47,7 +65,7 @@ body::-webkit-scrollbar-thumb,
 #childrenList::-webkit-scrollbar-thumb,
 #recentTasks::-webkit-scrollbar-thumb,
 .path-picker-menu::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, rgba(141, 79, 34, 0.72), rgba(99, 53, 19, 0.72));
+  background: linear-gradient(180deg, var(--scrollbar-thumb-start), var(--scrollbar-thumb-end));
   border: 2px solid transparent;
   border-radius: 999px;
   background-clip: padding-box;
@@ -130,7 +148,7 @@ h1 {
   flex-direction: column;
   justify-content: space-between;
   background:
-    radial-gradient(circle at top right, rgba(141, 79, 34, 0.22), transparent 38%),
+    radial-gradient(circle at top right, var(--card-glow), transparent 38%),
     var(--panel-bg);
 }
 
@@ -184,7 +202,7 @@ h1 {
 }
 
 .button-ghost {
-  background: rgba(141, 79, 34, 0.1);
+  background: var(--accent-soft-bg-strong);
   color: var(--accent);
 }
 
@@ -262,9 +280,9 @@ h1 {
   flex-wrap: wrap;
   gap: 8px;
   padding: 6px;
-  border: 1px solid rgba(90, 68, 36, 0.12);
+  border: 1px solid var(--panel-border);
   border-radius: 1.2rem;
-  background: rgba(141, 79, 34, 0.05);
+  background: var(--accent-soft-bg-muted);
   width: 100%;
 }
 
@@ -287,13 +305,13 @@ h1 {
 
 .segmented-option:hover,
 .stepper-button:hover {
-  background: rgba(141, 79, 34, 0.08);
+  background: var(--accent-soft-bg);
 }
 
 .segmented-option.is-selected {
-  background: linear-gradient(135deg, rgba(141, 79, 34, 0.92), rgba(106, 59, 24, 0.92));
+  background: linear-gradient(135deg, var(--accent-selected-start), var(--accent-selected-end));
   color: #fff;
-  box-shadow: 0 10px 20px rgba(90, 68, 36, 0.18);
+  box-shadow: 0 10px 20px rgba(var(--accent-rgb), 0.18);
 }
 
 .stepper {
@@ -302,19 +320,34 @@ h1 {
   justify-content: space-between;
   gap: 12px;
   padding: 8px;
-  border: 1px solid rgba(90, 68, 36, 0.12);
+  border: 1px solid var(--panel-border);
   border-radius: 1.2rem;
-  background: rgba(141, 79, 34, 0.05);
+  background: var(--accent-soft-bg-muted);
   width: min(100%, 320px);
 }
 
-.stepper-value {
+.stepper-input {
   min-width: 88px;
+  width: 96px;
   padding: 0 10px;
   font-size: 24px;
   font-weight: 700;
   text-align: center;
   color: var(--accent);
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: inherit;
+}
+
+.stepper-input::-webkit-outer-spin-button,
+.stepper-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.stepper-input[type="number"] {
+  -moz-appearance: textfield;
 }
 
 .path-picker-trigger {
@@ -331,8 +364,8 @@ h1 {
   top: 50%;
   width: 10px;
   height: 10px;
-  border-right: 2px solid rgba(141, 79, 34, 0.72);
-  border-bottom: 2px solid rgba(141, 79, 34, 0.72);
+  border-right: 2px solid var(--scrollbar-thumb-start);
+  border-bottom: 2px solid var(--scrollbar-thumb-start);
   transform: translateY(-65%) rotate(45deg);
   transition: transform 180ms ease;
 }
@@ -393,8 +426,8 @@ h1 {
 .path-picker-trigger:focus,
 .native-select:focus,
 .native-input:focus {
-  outline: 2px solid rgba(141, 79, 34, 0.18);
-  border-color: rgba(141, 79, 34, 0.42);
+  outline: 2px solid var(--accent-outline);
+  border-color: var(--accent-border-strong);
 }
 
 .chips {
@@ -411,6 +444,11 @@ h1 {
   background: var(--accent-soft);
   color: var(--text-main);
   font-size: 13px;
+}
+
+.chip-muted {
+  background: var(--accent-soft-bg);
+  color: var(--text-muted);
 }
 
 .card {
@@ -451,34 +489,41 @@ h1 {
 
 .breadcrumb-bar {
   min-height: 24px;
-  word-break: break-all;
+  max-width: 100%;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px;
   align-items: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+}
+
+.breadcrumb-bar::-webkit-scrollbar {
+  display: none;
 }
 
 .breadcrumb-link {
+  flex: 0 0 auto;
   border: 0;
   border-radius: 999px;
   padding: 6px 10px;
-  background: rgba(141, 79, 34, 0.08);
+  background: var(--accent-soft-bg);
   color: var(--text-main);
   font: inherit;
   cursor: pointer;
 }
 
 .breadcrumb-sep {
+  flex: 0 0 auto;
   color: rgba(101, 83, 60, 0.68);
 }
 
-.treemap-card {
-  min-height: 760px;
-}
-
+.treemap-card,
 .inspector-card {
-  min-height: 760px;
-  height: 760px;
+  height: clamp(540px, calc(100vh - 250px), 760px);
   display: flex;
   flex-direction: column;
 }
@@ -486,12 +531,13 @@ h1 {
 #treemapView {
   position: relative;
   width: 100%;
-  height: 660px;
+  flex: 1;
+  min-height: 0;
   border-radius: 20px;
   overflow: hidden;
   background:
-    radial-gradient(circle at top left, rgba(255, 244, 227, 0.8), rgba(248, 240, 226, 0.55) 36%, rgba(244, 237, 229, 0.95) 100%);
-  border: 1px solid rgba(90, 68, 36, 0.1);
+    radial-gradient(circle at top left, var(--treemap-surface-start), var(--treemap-surface-mid) 36%, var(--treemap-surface-end) 100%);
+  border: 1px solid var(--panel-border);
 }
 
 .treemap-empty,
@@ -512,9 +558,9 @@ h1 {
   min-height: 132px;
   text-align: center;
   padding: 18px 20px;
-  border: 1px dashed rgba(90, 68, 36, 0.12);
+  border: 1px dashed var(--panel-border);
   border-radius: 20px;
-  background: rgba(141, 79, 34, 0.03);
+  background: var(--accent-faint);
 }
 
 .treemap-node {
@@ -612,12 +658,10 @@ h1 {
 
 .treemap-node.tiny {
   padding: 6px;
-  border-radius: 10px;
 }
 
 .treemap-node.micro {
   padding: 0;
-  border-radius: 8px;
 }
 
 .treemap-node.tiny .treemap-node-submeta,
@@ -629,6 +673,8 @@ h1 {
 }
 
 .legend-chip {
+  border: 0;
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -636,7 +682,7 @@ h1 {
   padding: 7px 12px;
   font-size: 12px;
   color: var(--text-main);
-  background: rgba(141, 79, 34, 0.08);
+  background: var(--accent-soft-bg);
 }
 
 .legend-chip::before {
@@ -647,12 +693,26 @@ h1 {
   display: inline-block;
 }
 
+.legend-all::before {
+  background: linear-gradient(145deg, #f1d7ba, #8d4f22);
+}
+
 .legend-dir::before {
   background: linear-gradient(145deg, #f0c38e, #b86325);
 }
 
 .legend-file::before {
   background: linear-gradient(145deg, #9fd4f7, #2a7598);
+}
+
+.legend-chip.is-selected {
+  background: linear-gradient(135deg, var(--accent-selected-start), var(--accent-selected-end));
+  color: #fff;
+  box-shadow: 0 10px 22px rgba(var(--accent-rgb), 0.18);
+}
+
+.legend-chip.is-selected::before {
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .treemap-side {
@@ -685,7 +745,7 @@ h1 {
   gap: 18px;
   border: 1px solid var(--panel-border);
   border-radius: 28px;
-  background: rgba(255, 251, 245, 0.96);
+  background: color-mix(in srgb, var(--panel-bg) 92%, white);
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
   transform: translateX(calc(100% + 32px));
@@ -723,6 +783,21 @@ h1 {
   white-space: nowrap;
 }
 
+.task-progress {
+  margin-top: 6px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: right;
+}
+
+.treemap-filter {
+  width: auto;
+}
+
+.treemap-filter .segmented-option {
+  padding: 10px 14px;
+}
+
 .selection-meta {
   margin-bottom: 10px;
   font-size: 12px;
@@ -733,16 +808,16 @@ h1 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 12px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
 }
 
 .detail-row {
   display: grid;
   gap: 4px;
-  padding: 8px 10px;
-  border: 1px solid rgba(90, 68, 36, 0.08);
+  padding: 7px 10px;
+  border: 1px solid var(--panel-border);
   border-radius: 16px;
-  background: rgba(141, 79, 34, 0.04);
+  background: var(--accent-faint);
 }
 
 .detail-row span:first-child {
@@ -755,7 +830,13 @@ h1 {
 
 #selectionDetails {
   flex: 0 0 auto;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+}
+
+#selectionDetails .selection-meta {
+  margin-bottom: 8px;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 #childrenList,
@@ -767,8 +848,12 @@ h1 {
 #childrenList {
   flex: 1;
   min-height: 0;
-  border-top: 1px solid rgba(90, 68, 36, 0.08);
-  padding-top: 8px;
+  border-top: 1px solid var(--panel-border);
+  padding-top: 6px;
+}
+
+.inspector-actions {
+  margin-bottom: 8px;
 }
 
 #recentTasks {
@@ -778,8 +863,8 @@ h1 {
 }
 
 .list-row {
-  border-top: 1px solid rgba(90, 68, 36, 0.1);
-  padding: 12px 0;
+  border-top: 1px solid var(--panel-border);
+  padding: 10px 0;
 }
 
 .list-row:first-child {
@@ -799,7 +884,7 @@ h1 {
 }
 
 .interactive-row:hover {
-  background: rgba(141, 79, 34, 0.04);
+  background: var(--accent-faint);
 }
 
 .list-main,
@@ -830,9 +915,9 @@ h1 {
   display: grid;
   gap: 10px;
   padding: 14px 16px;
-  border: 1px solid rgba(90, 68, 36, 0.08);
+  border: 1px solid var(--panel-border);
   border-radius: 18px;
-  background: rgba(141, 79, 34, 0.03);
+  background: var(--accent-faint);
 }
 
 .recent-main {
@@ -856,7 +941,7 @@ h1 {
   min-height: 32px;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(141, 79, 34, 0.08);
+  background: var(--accent-soft-bg);
   color: var(--text-muted);
 }
 
@@ -936,7 +1021,7 @@ h1 {
   width: 56px;
   height: 32px;
   border-radius: 999px;
-  background: rgba(101, 83, 60, 0.22);
+  background: var(--switch-off-bg);
   transition: background 120ms ease;
 }
 
@@ -954,7 +1039,7 @@ h1 {
 }
 
 .switch-input:checked + .switch-ui {
-  background: rgba(141, 79, 34, 0.72);
+  background: var(--switch-on-bg);
 }
 
 .switch-input:checked + .switch-ui::after {
@@ -981,12 +1066,13 @@ h1 {
 
   .treemap-card,
   .inspector-card {
-    min-height: 560px;
     height: auto;
+    min-height: 560px;
   }
 
   #treemapView {
     height: 500px;
+    flex: none;
   }
 
   #childrenList {
@@ -1031,5 +1117,9 @@ h1 {
 
   .settings-card-toggle {
     grid-template-columns: 1fr;
+  }
+
+  .task-progress {
+    text-align: left;
   }
 }

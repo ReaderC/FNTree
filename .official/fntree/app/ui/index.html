@@ -65,7 +65,10 @@
             <h2>空间视图</h2>
             <p>视觉大小以当前视图中的最大块为基准分配，其余块按相对比例展示；滚轮可逐步替换进更小的块。</p>
           </div>
-          <div id="taskStatus">尚未开始</div>
+          <div>
+            <div id="taskStatus">尚未开始</div>
+            <div id="taskProgress" class="task-progress">等待扫描任务</div>
+          </div>
         </div>
 
         <div class="workspace-grid">
@@ -81,9 +84,10 @@
               <div id="breadcrumbBar" class="breadcrumb-bar">等待结果</div>
               <div class="treemap-side">
                 <div id="detailLevelLabel" class="detail-level-label">滚轮细化 0</div>
-                <div class="legend">
-                  <span class="legend-chip legend-dir">目录占用</span>
-                  <span class="legend-chip legend-file">文件占用</span>
+                <div id="treemapFilter" class="legend" role="radiogroup" aria-label="Treemap 显示类型">
+                  <button class="legend-chip legend-all is-selected" type="button" data-filter="all">全部</button>
+                  <button class="legend-chip legend-dir" type="button" data-filter="directory">目录占用</button>
+                  <button class="legend-chip legend-file" type="button" data-filter="file">文件占用</button>
                 </div>
               </div>
             </div>
