@@ -1,0 +1,11 @@
+appname               = fntree
+version               = 0.1.7
+display_name          = FN Tree
+desc                  = Disk usage analyzer for fnOS powered by gdu.
+arch                  = x86_64
+source                = thirdparty
+maintainer            = Codex
+distributor           = Codex
+desktop_uidir         = ui
+desktop_applaunchname = fntree.Application
+install_dep_apps      = nodejs_v22

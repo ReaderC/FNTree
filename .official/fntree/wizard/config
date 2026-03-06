@@ -1,0 +1,67 @@
+[
+  {
+    "stepTitle": "\u626b\u63cf\u8bbe\u7f6e",
+    "items": [
+      {
+        "type": "tips",
+        "helpText": "\u8fd9\u4e9b\u8bbe\u7f6e\u4f1a\u4fdd\u5b58\u4e3a\u5e94\u7528\u9ed8\u8ba4\u53c2\u6570\uff0c\u5e76\u5728\u6bcf\u6b21\u6267\u884c <code>gdu</code> \u65f6\u751f\u6548\u3002"
+      },
+      {
+        "type": "select",
+        "field": "wizard_scan_mode",
+        "label": "\u7edf\u8ba1\u65b9\u5f0f",
+        "initValue": "disk-usage",
+        "options": [
+          {
+            "label": "\u78c1\u76d8\u5360\u7528\uff08\u63a8\u8350\uff09",
+            "value": "disk-usage"
+          },
+          {
+            "label": "\u8868\u89c2\u5927\u5c0f",
+            "value": "apparent-size"
+          }
+        ]
+      },
+      {
+        "type": "switch",
+        "field": "wizard_ignore_hidden",
+        "label": "\u5ffd\u7565\u9690\u85cf\u76ee\u5f55",
+        "initValue": "true"
+      },
+      {
+        "type": "switch",
+        "field": "wizard_no_cross",
+        "label": "\u4e0d\u8de8\u6587\u4ef6\u7cfb\u7edf\u8fb9\u754c",
+        "initValue": "true"
+      },
+      {
+        "type": "switch",
+        "field": "wizard_follow_symlinks",
+        "label": "\u8ddf\u968f\u7b26\u53f7\u94fe\u63a5",
+        "initValue": "false"
+      },
+      {
+        "type": "switch",
+        "field": "wizard_sequential_scan",
+        "label": "\u987a\u5e8f\u626b\u63cf\uff08\u9002\u5408\u673a\u68b0\u76d8\uff09",
+        "initValue": "false"
+      },
+      {
+        "type": "text",
+        "field": "wizard_top_limit",
+        "label": "\u9ed8\u8ba4\u5c55\u793a\u524d N \u4e2a\u5927\u76ee\u5f55",
+        "initValue": "30",
+        "rules": [
+          {
+            "required": true,
+            "message": "\u8bf7\u8f93\u5165\u6570\u91cf"
+          },
+          {
+            "pattern": "^[0-9]+$",
+            "message": "\u6570\u91cf\u5fc5\u987b\u662f\u6570\u5b57"
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,0 +1,28 @@
+{
+    "data-share":
+    {
+        "shares":
+        [
+            {
+                "name": "fntree",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "fntree"
+                    ]
+                }
+            },
+            {
+                "name": "fntree/data",
+                "permission":
+                {
+                    "rw":
+                    [
+                        "fntree"
+                    ]
+                }
+            }
+        ]
+    }
+}

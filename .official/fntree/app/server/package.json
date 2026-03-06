@@ -1,0 +1,10 @@
+{
+  "name": "fnnas-fntree-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FNOS disk usage analyzer backend",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

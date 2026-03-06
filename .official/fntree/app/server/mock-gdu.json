@@ -1,0 +1,51 @@
+{
+  "name": "media",
+  "path": "/vol1/media",
+  "size": 48318382080,
+  "items": 4,
+  "children": [
+    {
+      "name": "movies",
+      "path": "/vol1/media/movies",
+      "size": 25769803776,
+      "items": 2,
+      "children": [
+        {
+          "name": "archive",
+          "path": "/vol1/media/movies/archive",
+          "size": 12884901888,
+          "items": 0,
+          "children": []
+        },
+        {
+          "name": "recent",
+          "path": "/vol1/media/movies/recent",
+          "size": 12884901888,
+          "items": 0,
+          "children": []
+        }
+      ]
+    },
+    {
+      "name": "photos",
+      "path": "/vol1/media/photos",
+      "size": 15032385536,
+      "items": 0,
+      "children": []
+    },
+    {
+      "name": "backups",
+      "path": "/vol1/media/backups",
+      "size": 6442450944,
+      "items": 0,
+      "children": []
+    },
+    {
+      "name": "downloads",
+      "path": "/vol1/media/downloads",
+      "size": 1073741824,
+      "items": 0,
+      "children": []
+    }
+  ]
+}

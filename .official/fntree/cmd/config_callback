@@ -1,0 +1,30 @@
+#!/bin/bash
+mkdir -p "${TRIM_PKGVAR}"
+if [ -n "${TRIM_DATA_ACCESSIBLE_PATHS}" ]; then
+  ACCESSIBLE_PATHS=$(printf '"%s"' "${TRIM_DATA_ACCESSIBLE_PATHS}" | sed 's/:/","/g')
+else
+  ACCESSIBLE_PATHS=""
+fi
+
+SCAN_MODE="${wizard_scan_mode:-disk-usage}"
+IGNORE_HIDDEN="${wizard_ignore_hidden:-true}"
+FOLLOW_SYMLINKS="${wizard_follow_symlinks:-false}"
+NO_CROSS="${wizard_no_cross:-true}"
+SEQUENTIAL="${wizard_sequential_scan:-false}"
+TOP_LIMIT="${wizard_top_limit:-30}"
+
+cat > "${TRIM_PKGVAR}/settings.json" <<EOF
+{
+  "accessiblePaths": [${ACCESSIBLE_PATHS}],
+  "scanOptions": {
+    "scanMode": "${SCAN_MODE}",
+    "ignoreHidden": ${IGNORE_HIDDEN},
+    "followSymlinks": ${FOLLOW_SYMLINKS},
+    "noCross": ${NO_CROSS},
+    "sequential": ${SEQUENTIAL},
+    "topLimit": ${TOP_LIMIT}
+  },
+  "updatedAt": "$(date -Iseconds)"
+}
+EOF
+exit 0

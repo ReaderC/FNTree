@@ -1,0 +1,16 @@
+.downloads/
+.fpk_inspect.zip
+.manual_build/
+.official_control/
+.probe/
+.rebuild/
+.tmp/
+.tooling/
+dist/
+fntreecontrol_pure_scaffold.fpk
+fntree_0.1.1_official_fnpack.fpk
+fntree_0.1.2_official_fnpack.fpk
+fntree_0.1.3_official_fnpack.fpk
+fntree_0.1.4_official_fnpack.fpk
+fntree_0.1.5_official_fnpack.fpk
+fntree_0.1.6_official_fnpack.fpk
