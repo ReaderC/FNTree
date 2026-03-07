@@ -36,6 +36,7 @@ const writeSettingsSnapshot = (settings) => {
 const pathInput = document.getElementById('pathInput');
 const analyzeButton = document.getElementById('analyzeButton');
 const accessiblePathTrigger = document.getElementById('accessiblePathTrigger');
+const accessiblePathLabel = document.getElementById('accessiblePathLabel');
 const accessiblePathMenu = document.getElementById('accessiblePathMenu');
 const accessiblePathsEmpty = document.getElementById('accessiblePathsEmpty');
 const accessiblePathsList = document.getElementById('accessiblePathsList');
@@ -56,8 +57,7 @@ const healthLabel = document.getElementById('healthLabel');
 const gduLabel = document.getElementById('gduLabel');
 const heroEyebrow = document.getElementById('heroEyebrow');
 const heroCopy = document.getElementById('heroCopy');
-const heroTreeTab = document.getElementById('heroTreeTab');
-const heroSearchTab = document.getElementById('heroSearchTab');
+const heroModeGroup = document.getElementById('heroModeGroup');
 const analysisStage = document.getElementById('analysisStage');
 const searchStage = document.getElementById('searchStage');
 const detailLevelLabel = document.getElementById('detailLevelLabel');
@@ -163,14 +163,12 @@ importResultInput?.addEventListener('change', () => {
   });
 });
 
-treemapFilter?.querySelectorAll('[data-filter]').forEach((button) => {
-  button.addEventListener('click', () => {
-    state.treemapFilter = button.dataset.filter || 'all';
-    renderTreemapFilter();
-    state.detailLevel = 0;
-    state.layoutCache = new Map();
-    renderWorkspace();
-  });
+treemapFilter?.addEventListener('change', () => {
+  state.treemapFilter = treemapFilter.value || 'all';
+  renderTreemapFilter();
+  state.detailLevel = 0;
+  state.layoutCache = new Map();
+  renderWorkspace();
 });
 
 document.addEventListener('keydown', (event) => {
@@ -179,12 +177,8 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
-heroTreeTab?.addEventListener('click', () => {
-  setAppMode('tree');
-});
-
-heroSearchTab?.addEventListener('click', () => {
-  setAppMode('search');
+heroModeGroup?.addEventListener('change', () => {
+  setAppMode(heroModeGroup.value === 'search' ? 'search' : 'tree');
 });
 
 window.addEventListener('resize', throttle(renderTreemapOnly, 120));
@@ -257,8 +251,9 @@ function setAppMode(mode, options = {}) {
   document.body.classList.toggle('mode-tree', nextMode === 'tree');
   analysisStage?.classList.toggle('is-active', nextMode === 'tree');
   searchStage?.classList.toggle('is-active', nextMode === 'search');
-  heroTreeTab?.classList.toggle('is-active', nextMode === 'tree');
-  heroSearchTab?.classList.toggle('is-active', nextMode === 'search');
+  if (heroModeGroup) {
+    heroModeGroup.value = nextMode;
+  }
 
   if (heroEyebrow) {
     heroEyebrow.textContent = VIEW_COPY[nextMode].eyebrow;
@@ -277,17 +272,25 @@ function setAppMode(mode, options = {}) {
 }
 
 function renderAccessiblePaths() {
-  accessiblePathsList.innerHTML = '';
+  if (accessiblePathsList) {
+    accessiblePathsList.innerHTML = '';
+  }
+  if (accessiblePathsEmpty) {
+    accessiblePathsEmpty.textContent = '';
+  }
   accessiblePathMenu.innerHTML = '';
   state.pathMenuRendered = false;
 
   if (!state.accessiblePaths.length) {
     accessiblePathsEmpty.textContent = '当前没有授权目录，请先在 FNOS 应用设置里授权。';
-    accessiblePathTrigger.textContent = '请选择已授权目录';
+    updateAccessiblePathTrigger('请选择已授权目录');
     pathInput.value = '';
     return;
   }
 
+  updateAccessiblePathTrigger(state.accessiblePaths[0]);
+  pathInput.value = state.accessiblePaths[0];
+  return;
   accessiblePathsEmpty.textContent = '';
 
   state.accessiblePaths.slice(0, 3).forEach((item, index) => {
@@ -297,7 +300,7 @@ function renderAccessiblePaths() {
     accessiblePathsList.append(chip);
 
     if (index === 0) {
-      accessiblePathTrigger.textContent = item;
+      updateAccessiblePathTrigger(item);
       pathInput.value = item;
     }
   });
@@ -316,6 +319,14 @@ function setPathMenuOpen(open) {
   accessiblePathTrigger.classList.toggle('is-open', open);
 }
 
+function updateAccessiblePathTrigger(label) {
+  if (accessiblePathLabel) {
+    accessiblePathLabel.textContent = label;
+  }
+  accessiblePathTrigger.setAttribute('title', label);
+  accessiblePathTrigger.setAttribute('aria-label', label);
+}
+
 function ensureAccessiblePathMenu() {
   if (state.pathMenuRendered) {
     return;
@@ -330,7 +341,7 @@ function ensureAccessiblePathMenu() {
     option.dataset.path = item;
     option.addEventListener('click', () => {
       pathInput.value = item;
-      accessiblePathTrigger.textContent = item;
+      updateAccessiblePathTrigger(item);
       setPathMenuOpen(false);
     });
     accessiblePathMenu.append(option);
@@ -1274,11 +1285,9 @@ function renderChildrenList() {
 }
 
 function renderTreemapFilter() {
-  treemapFilter?.querySelectorAll('[data-filter]').forEach((button) => {
-    const selected = button.dataset.filter === state.treemapFilter;
-    button.classList.toggle('is-selected', selected);
-    button.setAttribute('aria-checked', selected ? 'true' : 'false');
-  });
+  if (treemapFilter) {
+    treemapFilter.value = state.treemapFilter;
+  }
 }
 
 function matchesTreemapFilter(node) {

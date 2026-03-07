@@ -114,11 +114,6 @@
         0.42,
       )} 46%, ${mix('#e5dbc5', preset.soft, 0.24)} 100%)`,
     );
-    root.style.setProperty('--mdui-color-primary', preset.accent);
-    root.style.setProperty('--mdui-color-outline-variant', withAlpha(preset.accent, 0.22));
-    root.style.setProperty('--mdui-color-surface-container', withAlpha(panelMix, 0.96));
-    root.style.setProperty('--mdui-color-surface-container-high', withAlpha(panelStrong, 0.98));
-    root.style.setProperty('--mdui-color-on-surface', '#24190c');
     root.style.setProperty('--mdui-elevation-level1', `0 10px 30px ${withAlpha(preset.accent, 0.08)}`);
     root.style.setProperty('--mdui-elevation-level4', `0 16px 44px ${withAlpha(preset.accent, 0.14)}`);
 

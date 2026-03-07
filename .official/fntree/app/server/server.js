@@ -144,9 +144,10 @@ function defaultSettings() {
       treemapMaxVisible: 24,
     },
     searchOptions: {
-      quickLimit: 50,
-      liveLimit: 50,
+      quickLimit: 0,
+      liveLimit: 0,
       indexIntervalHours: 24,
+      indexedPaths: [],
     },
     updatedAt: null,
   };
@@ -178,24 +179,17 @@ function normalizeSettings(settings) {
       ),
     },
     searchOptions: {
-      quickLimit: normalizeBoundedInteger(
-        searchOptions.quickLimit,
-        defaults.searchOptions.quickLimit,
-        10,
-        200,
-      ),
-      liveLimit: normalizeBoundedInteger(
-        searchOptions.liveLimit,
-        defaults.searchOptions.liveLimit,
-        10,
-        200,
-      ),
+      quickLimit: normalizeSearchLimit(searchOptions.quickLimit, defaults.searchOptions.quickLimit),
+      liveLimit: normalizeSearchLimit(searchOptions.liveLimit, defaults.searchOptions.liveLimit),
       indexIntervalHours: normalizeBoundedInteger(
         searchOptions.indexIntervalHours,
         defaults.searchOptions.indexIntervalHours,
         1,
         168,
       ),
+      indexedPaths: Array.isArray(searchOptions.indexedPaths)
+        ? searchOptions.indexedPaths.filter((item) => typeof item === 'string' && item.trim())
+        : defaults.searchOptions.indexedPaths,
     },
     updatedAt: settings?.updatedAt || defaults.updatedAt,
   };
@@ -232,6 +226,20 @@ function normalizeBoundedInteger(value, fallback, min, max) {
     return parsed;
   }
 
+  return fallback;
+}
+
+function normalizeSearchLimit(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  if (parsed <= 0) {
+    return 0;
+  }
+  if (Number.isInteger(parsed) && parsed >= 10 && parsed <= 200) {
+    return parsed;
+  }
   return fallback;
 }
 
@@ -309,6 +317,13 @@ async function handleApi(req, res, url) {
       updatedAt: new Date().toISOString(),
     });
 
+    const indexedPathsChanged =
+      JSON.stringify(saved.searchOptions.indexedPaths || []) !==
+      JSON.stringify(current.searchOptions?.indexedPaths || []);
+    if (indexedPathsChanged) {
+      startSearchReindex(saved, 'settings');
+    }
+
     writeJson(res, 200, {
       ...saved,
       gduBinary: GDU_BINARY,
@@ -379,11 +394,9 @@ async function handleApi(req, res, url) {
     }
 
     const basePath = requestedBasePath && requestedBasePath !== '*' ? requestedBasePath : '';
-    const requestedLimit = normalizeBoundedInteger(
+    const requestedLimit = normalizeSearchLimit(
       payload.limit,
       mode === 'live' ? settings.searchOptions.liveLimit : settings.searchOptions.quickLimit,
-      10,
-      200,
     );
     maybeScheduleSearchIndexRefresh(settings);
 
@@ -402,12 +415,47 @@ async function handleApi(req, res, url) {
         basePath: basePath || null,
         total: result.items.length,
         backend: result.backend,
-        limit: requestedLimit,
+        limit: requestedLimit || null,
         items: result.items,
       });
     } catch (error) {
       writeJson(res, error.statusCode || 503, {
         error: error.code || 'search_failed',
+        message: error.message,
+      });
+    }
+    return;
+  }
+
+  if (req.method === 'GET' && url.pathname === '/api/search/children') {
+    const settings = readSettings();
+    const requestedPath =
+      typeof url.searchParams.get('path') === 'string'
+        ? url.searchParams.get('path').trim()
+        : '';
+    if (!requestedPath) {
+      writeJson(res, 400, {
+        error: 'invalid_path',
+        message: 'Path is required.',
+      });
+      return;
+    }
+
+    const access = validatePathAccess(requestedPath, settings.accessiblePaths);
+    if (!access.ok) {
+      writeJson(res, 403, {
+        error: 'path_not_authorized',
+        message: access.message,
+      });
+      return;
+    }
+
+    try {
+      const items = readDirectoryChildren(requestedPath);
+      writeJson(res, 200, { items });
+    } catch (error) {
+      writeJson(res, 500, {
+        error: 'read_children_failed',
         message: error.message,
       });
     }
@@ -869,6 +917,7 @@ function getSearchStatus() {
   const settings = arguments[0] || readSettings();
   const meta = readSearchIndexMeta();
   const fd = detectBinary([FD_BINARY, FDFIND_BINARY]);
+  const lastError = sanitizeSearchIndexError(meta.lastError);
   return {
     quickBackend: fd,
     quickIndexer: fd,
@@ -878,7 +927,7 @@ function getSearchStatus() {
       updatedAt: meta.updatedAt || null,
       entryCount: Number(meta.entryCount || 0),
       intervalHours: settings.searchOptions?.indexIntervalHours || 24,
-      lastError: meta.lastError || '',
+      lastError,
       source: meta.source || '',
       status: searchIndexJob
         ? 'running'
@@ -941,6 +990,20 @@ function resolveExecutableCommand(command) {
   return '';
 }
 
+function getIndexedPaths(settings) {
+  const accessiblePaths = Array.isArray(settings?.accessiblePaths)
+    ? settings.accessiblePaths.filter((item) => typeof item === 'string' && item.trim())
+    : [];
+  const indexedPaths = Array.isArray(settings?.searchOptions?.indexedPaths)
+    ? settings.searchOptions.indexedPaths.filter((item) => typeof item === 'string' && item.trim())
+    : [];
+  if (!indexedPaths.length) {
+    return accessiblePaths;
+  }
+  const allowed = new Set(accessiblePaths.map((item) => path.resolve(item)));
+  return indexedPaths.filter((item) => allowed.has(path.resolve(item)));
+}
+
 async function searchPaths(options) {
   return options.mode === 'live' ? searchWithFd(options) : searchWithIndexedFd(options);
 }
@@ -977,12 +1040,11 @@ async function searchWithIndexedFd(options) {
       continue;
     }
     const name = path.basename(candidate).toLowerCase();
-    const full = candidate.toLowerCase();
-    if (!full.includes(queryLower) && !name.includes(queryLower)) {
+    if (!name.includes(queryLower)) {
       continue;
     }
     candidates.push(candidate);
-    if (candidates.length >= options.limit * 8) {
+    if (options.limit > 0 && candidates.length >= options.limit * 8) {
       break;
     }
   }
@@ -1003,19 +1065,25 @@ async function searchWithFd(options) {
     throw error;
   }
 
-  const searchRoot = options.basePath || options.accessiblePaths[0];
-  if (!searchRoot) {
+  const searchRoots = options.basePath ? [options.basePath] : options.accessiblePaths;
+  if (!searchRoots.length) {
     const error = new Error('No accessible path is available for live search.');
     error.code = 'no_accessible_paths';
     error.statusCode = 403;
     throw error;
   }
 
-  const args = ['--absolute-path', '--color', 'never', '--hidden', '--full-path', options.query, searchRoot];
-  const raw = await runCommand(backend.command, args, {
-    maxOutputBytes: 4 * 1024 * 1024,
-  });
-  const candidates = splitCommandOutput(raw.stdout);
+  const candidateSet = new Set();
+  for (const searchRoot of searchRoots) {
+    const args = ['--absolute-path', '--color', 'never', '--hidden', options.query, searchRoot];
+    const raw = await runCommand(backend.command, args, {
+      maxOutputBytes: 4 * 1024 * 1024,
+    });
+    for (const item of splitCommandOutput(raw.stdout)) {
+      candidateSet.add(item);
+    }
+  }
+  const candidates = Array.from(candidateSet);
   const items = await collectSearchResults(candidates, options);
   return {
     backend: backend.command,
@@ -1048,7 +1116,7 @@ async function collectSearchResults(paths, options) {
     }
 
     const name = path.basename(resolved);
-    if (!resolved.toLowerCase().includes(queryLower) && !name.toLowerCase().includes(queryLower)) {
+    if (!name.toLowerCase().includes(queryLower)) {
       continue;
     }
 
@@ -1069,7 +1137,7 @@ async function collectSearchResults(paths, options) {
       parent: path.dirname(resolved),
     });
 
-    if (items.length >= options.limit) {
+    if (options.limit > 0 && items.length >= options.limit) {
       break;
     }
   }
@@ -1102,7 +1170,7 @@ function readSearchIndexMeta() {
     return {
       updatedAt: content.updatedAt || null,
       entryCount: Number(content.entryCount || 0),
-      lastError: content.lastError || '',
+      lastError: sanitizeSearchIndexError(content.lastError),
       source: content.source || '',
     };
   } catch (error) {
@@ -1120,11 +1188,31 @@ function writeSearchIndexMeta(meta) {
   const next = {
     updatedAt: meta.updatedAt || null,
     entryCount: Number(meta.entryCount || 0),
-    lastError: meta.lastError || '',
+    lastError: sanitizeSearchIndexError(meta.lastError),
     source: meta.source || '',
   };
   fs.writeFileSync(SEARCH_INDEX_META_FILE, JSON.stringify(next, null, 2));
   return next;
+}
+
+function sanitizeSearchIndexError(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const normalized = value.trim();
+  if (!normalized) {
+    return '';
+  }
+
+  if (
+    normalized.includes('--strip-cwd-prefix') ||
+    normalized.includes('req is not defined')
+  ) {
+    return '';
+  }
+
+  return normalized;
 }
 
 function readSearchIndexEntries() {
@@ -1197,9 +1285,7 @@ function startSearchReindex(settings, source) {
 }
 
 async function reindexSearchDatabases(settings, source) {
-  const accessiblePaths = Array.isArray(settings.accessiblePaths)
-    ? settings.accessiblePaths.filter((item) => typeof item === 'string' && item.trim())
-    : [];
+  const accessiblePaths = getIndexedPaths(settings);
   if (!accessiblePaths.length) {
     throw new Error('No accessible paths available for search indexing.');
   }
@@ -1229,6 +1315,34 @@ async function reindexSearchDatabases(settings, source) {
   });
 }
 
+function readDirectoryChildren(targetPath) {
+  const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+  return entries
+    .map((entry) => {
+      const entryPath = path.join(targetPath, entry.name);
+      try {
+        const stats = fs.statSync(entryPath);
+        return {
+          path: entryPath,
+          name: entry.name,
+          type: stats.isDirectory() ? 'directory' : 'file',
+          size: stats.size,
+          mtime: stats.mtime.toISOString(),
+          parent: targetPath,
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean)
+    .sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === 'directory' ? -1 : 1;
+      }
+      return String(a.name).localeCompare(String(b.name), 'zh-CN');
+    });
+}
+
 function pushIndexedEntry(entries, seen, candidate) {
   const resolved = path.resolve(candidate);
   if (seen.has(resolved)) {
@@ -1252,14 +1366,14 @@ function pushIndexedEntry(entries, seen, candidate) {
 async function collectFdIndexPaths(command, accessiblePath) {
   const attempts = [
     {
-      args: ['--absolute-path', '--color', 'never', '--hidden', '--follow', '.', accessiblePath],
-      cwd: TEMP_ROOT,
-      normalize: (items) => items.map((item) => path.resolve(item)),
-    },
-    {
       args: ['--color', 'never', '--hidden', '--follow', '.'],
       cwd: accessiblePath,
       normalize: (items) => items.map((item) => path.resolve(accessiblePath, item)),
+    },
+    {
+      args: ['--absolute-path', '--color', 'never', '--hidden', '--follow', '.'],
+      cwd: accessiblePath,
+      normalize: (items) => items.map((item) => path.resolve(item)),
     },
   ];
   const failures = [];

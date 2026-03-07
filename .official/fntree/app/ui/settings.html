@@ -22,206 +22,195 @@
         <div class="panel-header">
           <div>
             <div class="eyebrow">FN Tree Settings</div>
-            <h1 class="settings-title">扫描设置</h1>
-            <p>这些配置会作为默认扫描参数保存，后续分析会直接沿用。</p>
+            <h1 class="settings-title">设置</h1>
+            <p id="settingsIntro">调整默认扫描与搜索行为。</p>
           </div>
-          <a class="button button-ghost" href="/">返回分析页</a>
+          <mdui-button id="settingsBackButton" href="/#tree" variant="outlined">返回分析页</mdui-button>
         </div>
 
-        <div class="settings-page-grid">
-          <label id="searchSettingsAnchor" class="settings-card settings-card-stack">
-            <span class="settings-label">主题色</span>
-            <span class="settings-help">统一按钮、输入框、强调色和 mdui 组件的主色调。</span>
-            <div id="settingTheme" class="segmented-control" role="radiogroup" aria-label="主题色">
-              <button class="segmented-option" type="button" data-value="cinnamon">暖棕</button>
-              <button class="segmented-option" type="button" data-value="slate">石墨</button>
-              <button class="segmented-option" type="button" data-value="forest">森林</button>
-              <button class="segmented-option" type="button" data-value="ocean">海蓝</button>
-            </div>
-          </label>
+        <div class="settings-layout">
+          <mdui-navigation-rail id="settingsRail" class="settings-rail">
+            <mdui-navigation-rail-item id="settingsRailScan" value="scan" active>
+              <svg slot="icon" class="rail-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M12 3a9 9 0 1 0 9 9a9 9 0 0 0-9-9m0 2a7 7 0 0 1 5.9 10.76l-1.66-1.66A4 4 0 1 0 8 12h2a2 2 0 1 1 3.41 1.41l-2.12-2.12l-1.41 1.41l3.95 3.95A7 7 0 0 1 12 5"
+                />
+              </svg>
+              扫描设置
+            </mdui-navigation-rail-item>
+            <mdui-navigation-rail-item id="settingsRailSearch" value="search">
+              <svg slot="icon" class="rail-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M10 4a6 6 0 1 0 3.87 10.58l4.27 4.27l1.41-1.41l-4.27-4.27A6 6 0 0 0 10 4m0 2a4 4 0 1 1 0 8a4 4 0 0 1 0-8"
+                />
+              </svg>
+              搜索设置
+            </mdui-navigation-rail-item>
+          </mdui-navigation-rail>
 
-          <label class="settings-card settings-card-stack">
-            <span class="settings-label">统计方式</span>
-            <span class="settings-help">默认使用磁盘占用。切换为表观大小后，会更接近文件名义大小。</span>
-            <div id="settingScanMode" class="segmented-control" role="radiogroup" aria-label="统计方式">
-              <button class="segmented-option" type="button" data-value="disk-usage">磁盘占用</button>
-              <button class="segmented-option" type="button" data-value="apparent-size">表观大小</button>
-            </div>
-          </label>
+          <div class="settings-content">
+            <section id="settingsSectionScan" class="settings-section is-active">
+              <div class="settings-page-grid">
+                <section class="settings-card settings-card-stack">
+                  <span class="settings-label">主题色</span>
+                  <span class="settings-help">统一按钮、输入框、强调色和 mdui 组件的主色调。</span>
+                  <mdui-segmented-button-group id="settingTheme" selects="single" value="cinnamon">
+                    <mdui-segmented-button value="cinnamon">暖棕</mdui-segmented-button>
+                    <mdui-segmented-button value="slate">石墨</mdui-segmented-button>
+                    <mdui-segmented-button value="forest">森林</mdui-segmented-button>
+                    <mdui-segmented-button value="ocean">海蓝</mdui-segmented-button>
+                  </mdui-segmented-button-group>
+                </section>
 
-          <label class="settings-card settings-card-stack">
-            <span class="settings-label">前 N 项显示数量</span>
-            <span class="settings-help">用于控制默认展示的前 N 个大目录或大文件。</span>
-            <div class="stepper" aria-label="前 N 项显示数量">
-              <button id="topLimitDecrease" class="stepper-button" type="button" aria-label="减少 1">
-                -1
-              </button>
-              <input
-                id="settingTopLimit"
-                class="stepper-input"
-                type="number"
-                min="1"
-                max="999"
-                step="1"
-                inputmode="numeric"
-                value="30"
-                aria-label="前 N 项显示数量"
-              >
-              <button id="topLimitIncrease" class="stepper-button" type="button" aria-label="增加 1">
-                +1
-              </button>
-            </div>
-          </label>
+                <section class="settings-card settings-card-stack">
+                  <span class="settings-label">统计方式</span>
+                  <span class="settings-help">默认使用磁盘占用。切换为表观大小后，会更接近文件名义大小。</span>
+                  <mdui-segmented-button-group id="settingScanMode" selects="single" value="disk-usage">
+                    <mdui-segmented-button value="disk-usage">磁盘占用</mdui-segmented-button>
+                    <mdui-segmented-button value="apparent-size">表观大小</mdui-segmented-button>
+                  </mdui-segmented-button-group>
+                </section>
 
-          <label class="settings-card settings-card-stack">
-            <span class="settings-label">Treemap 最大显示块数</span>
-            <span class="settings-help">控制 treemap 一次最多展示多少个块，范围 5 到 30。</span>
-            <div class="stepper" aria-label="Treemap 最大显示块数">
-              <button
-                id="treemapVisibleDecrease"
-                class="stepper-button"
-                type="button"
-                aria-label="减少 1"
-              >
-                -1
-              </button>
-              <input
-                id="settingTreemapVisible"
-                class="stepper-input"
-                type="number"
-                min="5"
-                max="30"
-                step="1"
-                inputmode="numeric"
-                value="24"
-                aria-label="Treemap 最大显示块数"
-              >
-              <button
-                id="treemapVisibleIncrease"
-                class="stepper-button"
-                type="button"
-                aria-label="增加 1"
-              >
-                +1
-              </button>
-            </div>
-          </label>
+                <section class="settings-card settings-card-stack">
+                  <span class="settings-label">前 N 项显示数量</span>
+                  <span class="settings-help">用于控制默认展示的前 N 个大目录或大文件。</span>
+                  <div class="mdui-stepper" aria-label="前 N 项显示数量">
+                    <mdui-button-icon id="topLimitDecrease" variant="outlined" aria-label="减少 1">
+                      <svg class="stepper-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M19 13H5v-2h14z" />
+                      </svg>
+                    </mdui-button-icon>
+                    <input
+                      id="settingTopLimit"
+                      class="stepper-field"
+                      type="number"
+                      min="1"
+                      max="999"
+                      step="1"
+                      inputmode="numeric"
+                      value="30"
+                      aria-label="显示数量"
+                    />
+                    <mdui-button-icon id="topLimitIncrease" variant="outlined" aria-label="增加 1">
+                      <svg class="stepper-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z" />
+                      </svg>
+                    </mdui-button-icon>
+                  </div>
+                </section>
 
-          <label class="settings-card settings-card-stack">
-            <span class="settings-label">搜索索引周期（小时）</span>
-            <span class="settings-help">控制本地文件索引自动重建的周期，范围 1 到 168 小时。</span>
-            <div class="stepper" aria-label="搜索索引周期（小时）">
-              <button id="searchIndexIntervalDecrease" class="stepper-button" type="button" aria-label="减少 1">
-                -1
-              </button>
-              <input
-                id="settingSearchIndexInterval"
-                class="stepper-input"
-                type="number"
-                min="1"
-                max="168"
-                step="1"
-                inputmode="numeric"
-                value="24"
-                aria-label="搜索索引周期（小时）"
-              >
-              <button id="searchIndexIntervalIncrease" class="stepper-button" type="button" aria-label="增加 1">
-                +1
-              </button>
-            </div>
-            <span id="searchIndexUpdatedAt" class="settings-help">尚未建立索引</span>
-          </label>
+                <section class="settings-card settings-card-stack">
+                  <span class="settings-label">Treemap 最大显示块数</span>
+                  <span class="settings-help">控制 treemap 一次最多展示多少个块，范围 5 到 30。</span>
+                  <div class="mdui-stepper" aria-label="Treemap 最大显示块数">
+                    <mdui-button-icon id="treemapVisibleDecrease" variant="outlined" aria-label="减少 1">
+                      <svg class="stepper-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M19 13H5v-2h14z" />
+                      </svg>
+                    </mdui-button-icon>
+                    <input
+                      id="settingTreemapVisible"
+                      class="stepper-field"
+                      type="number"
+                      min="5"
+                      max="30"
+                      step="1"
+                      inputmode="numeric"
+                      value="24"
+                      aria-label="显示块数"
+                    />
+                    <mdui-button-icon id="treemapVisibleIncrease" variant="outlined" aria-label="增加 1">
+                      <svg class="stepper-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z" />
+                      </svg>
+                    </mdui-button-icon>
+                  </div>
+                </section>
 
-          <label class="settings-card settings-card-stack">
-            <span class="settings-label">快速搜索结果上限</span>
-            <span class="settings-help">用于默认快速搜索返回的最大结果数，范围 10 到 200。</span>
-            <div class="stepper" aria-label="快速搜索结果上限">
-              <button id="quickLimitDecrease" class="stepper-button" type="button" aria-label="减少 10">
-                -10
-              </button>
-              <input
-                id="settingQuickLimit"
-                class="stepper-input"
-                type="number"
-                min="10"
-                max="200"
-                step="10"
-                inputmode="numeric"
-                value="50"
-                aria-label="快速搜索结果上限"
-              >
-              <button id="quickLimitIncrease" class="stepper-button" type="button" aria-label="增加 10">
-                +10
-              </button>
-            </div>
-          </label>
+                <section class="settings-card settings-card-toggle">
+                  <span class="settings-copy">
+                    <span class="settings-label">忽略隐藏目录</span>
+                    <span class="settings-help">跳过以点开头的目录，减少系统和缓存目录对结果的干扰。</span>
+                  </span>
+                  <mdui-switch id="settingIgnoreHidden"></mdui-switch>
+                </section>
 
-          <label class="settings-card settings-card-stack">
-            <span class="settings-label">实时搜索结果上限</span>
-            <span class="settings-help">用于默认实时搜索返回的最大结果数，范围 10 到 200。</span>
-            <div class="stepper" aria-label="实时搜索结果上限">
-              <button id="liveLimitDecrease" class="stepper-button" type="button" aria-label="减少 10">
-                -10
-              </button>
-              <input
-                id="settingLiveLimit"
-                class="stepper-input"
-                type="number"
-                min="10"
-                max="200"
-                step="10"
-                inputmode="numeric"
-                value="50"
-                aria-label="实时搜索结果上限"
-              >
-              <button id="liveLimitIncrease" class="stepper-button" type="button" aria-label="增加 10">
-                +10
-              </button>
-            </div>
-          </label>
+                <section class="settings-card settings-card-toggle">
+                  <span class="settings-copy">
+                    <span class="settings-label">不跨文件系统</span>
+                    <span class="settings-help">限制在当前挂载点内扫描，避免跨卷或跨挂载路径扩散。</span>
+                  </span>
+                  <mdui-switch id="settingNoCross"></mdui-switch>
+                </section>
 
-          <label class="settings-card settings-card-toggle">
-            <span class="settings-copy">
-              <span class="settings-label">忽略隐藏目录</span>
-              <span class="settings-help">跳过以点开头的目录，减少系统和缓存目录对结果的干扰。</span>
-            </span>
-            <input id="settingIgnoreHidden" type="checkbox" class="switch-input">
-            <span class="switch-ui"></span>
-          </label>
+                <section class="settings-card settings-card-toggle">
+                  <span class="settings-copy">
+                    <span class="settings-label">跟随符号链接</span>
+                    <span class="settings-help">关闭时更安全，打开后会统计符号链接指向的文件大小。</span>
+                  </span>
+                  <mdui-switch id="settingFollowSymlinks"></mdui-switch>
+                </section>
 
-          <label class="settings-card settings-card-toggle">
-            <span class="settings-copy">
-              <span class="settings-label">不跨文件系统</span>
-              <span class="settings-help">限制在当前挂载点内扫描，避免跨卷或跨挂载路径扩散。</span>
-            </span>
-            <input id="settingNoCross" type="checkbox" class="switch-input">
-            <span class="switch-ui"></span>
-          </label>
+                <section class="settings-card settings-card-toggle">
+                  <span class="settings-copy">
+                    <span class="settings-label">并发扫描</span>
+                    <span class="settings-help">适合 SSD。关闭后会改为顺序扫描，更适合机械盘。</span>
+                  </span>
+                  <mdui-switch id="settingConcurrent"></mdui-switch>
+                </section>
+              </div>
+            </section>
 
-          <label class="settings-card settings-card-toggle">
-            <span class="settings-copy">
-              <span class="settings-label">跟随符号链接</span>
-              <span class="settings-help">关闭时更安全，打开后会统计符号链接指向的文件大小。</span>
-            </span>
-            <input id="settingFollowSymlinks" type="checkbox" class="switch-input">
-            <span class="switch-ui"></span>
-          </label>
+            <section id="settingsSectionSearch" class="settings-section">
+              <div class="settings-page-grid">
+                <section class="settings-card settings-card-stack">
+                  <span class="settings-label">搜索索引周期（小时）</span>
+                  <span class="settings-help">控制本地文件索引自动重建的周期，范围 1 到 168 小时。</span>
+                  <div class="mdui-stepper" aria-label="搜索索引周期（小时）">
+                    <mdui-button-icon id="searchIndexIntervalDecrease" variant="outlined" aria-label="减少 1">
+                      <svg class="stepper-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M19 13H5v-2h14z" />
+                      </svg>
+                    </mdui-button-icon>
+                    <input
+                      id="settingSearchIndexInterval"
+                      class="stepper-field"
+                      type="number"
+                      min="1"
+                      max="168"
+                      step="1"
+                      inputmode="numeric"
+                      value="24"
+                      aria-label="索引周期"
+                    />
+                    <mdui-button-icon id="searchIndexIntervalIncrease" variant="outlined" aria-label="增加 1">
+                      <svg class="stepper-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path fill="currentColor" d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z" />
+                      </svg>
+                    </mdui-button-icon>
+                  </div>
+                  <span id="searchIndexUpdatedAt" class="settings-help">尚未建立索引</span>
+                </section>
 
-          <label class="settings-card settings-card-toggle">
-            <span class="settings-copy">
-              <span class="settings-label">并发扫描</span>
-              <span class="settings-help">适合 SSD。关闭后会改为顺序扫描，更适合机械盘。</span>
-            </span>
-            <input id="settingConcurrent" type="checkbox" class="switch-input">
-            <span class="switch-ui"></span>
-          </label>
+                <section class="settings-card settings-card-stack">
+                  <span class="settings-label">索引目录</span>
+                  <span class="settings-help">默认索引全部授权目录。关闭某个目录后，重建索引时会同时移除它已有的索引数据。</span>
+                  <div id="indexedPathsList" class="indexed-paths-list">
+                    <div class="list-empty">正在读取授权目录</div>
+                  </div>
+                </section>
+              </div>
+            </section>
+          </div>
         </div>
 
         <div class="settings-footer">
           <div id="settingsStatus" class="settings-status">正在读取设置</div>
           <div class="settings-actions">
-            <a class="button button-ghost" href="/">取消</a>
-            <button id="saveSettingsButton" class="button" type="button">保存设置</button>
+            <mdui-button id="settingsCancelButton" href="/#tree" variant="outlined">返回分析页</mdui-button>
+            <mdui-button id="saveSettingsButton" variant="filled">保存设置</mdui-button>
           </div>
         </div>
       </section>

@@ -8,10 +8,15 @@
   const searchQuery = document.getElementById('searchQuery');
   const searchSubmitButton = document.getElementById('searchSubmitButton');
   const searchResetButton = document.getElementById('searchResetButton');
+  const searchCurrentScope = document.getElementById('searchCurrentScope');
   const searchSummary = document.getElementById('searchSummary');
   const searchResultMeta = document.getElementById('searchResultMeta');
   const searchResultList = document.getElementById('searchResultList');
+  const searchTypeFilterGroup = document.getElementById('searchTypeFilterGroup');
+  const searchSortSelect = document.getElementById('searchSortSelect');
+  const searchSortDirection = document.getElementById('searchSortDirection');
   const searchSelection = document.getElementById('searchSelection');
+  const searchChildrenList = document.getElementById('searchChildrenList');
   const searchCopyPathButton = document.getElementById('searchCopyPathButton');
   const searchReindexButton =
     document.getElementById('searchReindexButton') || { disabled: false, addEventListener() {} };
@@ -24,10 +29,15 @@
     !searchQuery ||
     !searchSubmitButton ||
     !searchResetButton ||
+    !searchCurrentScope ||
     !searchSummary ||
     !searchResultMeta ||
     !searchResultList ||
+    !searchTypeFilterGroup ||
+    !searchSortSelect ||
+    !searchSortDirection ||
     !searchSelection ||
+    !searchChildrenList ||
     !searchCopyPathButton
   ) {
     return;
@@ -50,12 +60,17 @@
     accessiblePaths: [],
     basePath: '',
     basePathMenuOpen: false,
+    rawResults: [],
     results: [],
     selectedPath: '',
+    resultFilter: 'all',
+    resultSort: 'relevance',
+    resultDirection: 'desc',
+    selectedChildren: [],
     searchStatus: null,
     searchOptions: {
-      quickLimit: 50,
-      liveLimit: 50,
+      quickLimit: 0,
+      liveLimit: 0,
     },
   };
 
@@ -63,11 +78,9 @@
     showError(error.message || '初始化搜索页失败');
   });
 
-  searchModeGroup.querySelectorAll('[data-mode]').forEach((button) => {
-    button.addEventListener('click', () => {
-      state.mode = button.dataset.mode === 'live' ? 'live' : 'quick';
-      renderModeButtons();
-    });
+  searchModeGroup.addEventListener('change', () => {
+    state.mode = searchModeGroup.value === 'live' ? 'live' : 'quick';
+    renderModeButtons();
   });
 
   searchBasePathTrigger.addEventListener('click', () => {
@@ -100,11 +113,28 @@
 
   searchResetButton.addEventListener('click', () => {
     searchQuery.value = '';
+    state.rawResults = [];
     state.results = [];
     state.selectedPath = '';
+    state.selectedChildren = [];
     renderResults();
-    renderSelection(null);
+    void renderSelection(null);
     searchResultMeta.textContent = '已清空结果';
+  });
+
+  searchTypeFilterGroup.addEventListener('change', () => {
+    state.resultFilter = normalizeResultFilter(searchTypeFilterGroup.value);
+    applyResultView();
+  });
+
+  searchSortSelect.addEventListener('change', () => {
+    state.resultSort = normalizeResultSort(searchSortSelect.value);
+    applyResultView();
+  });
+
+  searchSortDirection.addEventListener('change', () => {
+    state.resultDirection = normalizeSortDirection(searchSortDirection.value);
+    applyResultView();
   });
 
   searchQuery.addEventListener('keydown', (event) => {
@@ -158,21 +188,19 @@
     renderModeButtons();
     renderAccessiblePaths();
     renderSearchStatus();
+    renderResultControls();
     searchSummary.hidden = true;
   }
 
   function renderModeButtons() {
-    searchModeGroup.querySelectorAll('[data-mode]').forEach((button) => {
-      const selected = button.dataset.mode === state.mode;
-      button.classList.toggle('is-selected', selected);
-      button.setAttribute('aria-checked', selected ? 'true' : 'false');
-    });
+    searchModeGroup.value = state.mode;
   }
 
   function renderAccessiblePaths() {
     state.basePath = '';
     searchBasePathMenu.innerHTML = '';
     updateBasePathTrigger('全部已授权目录');
+    renderCurrentScope();
     renderBasePathMenu();
   }
 
@@ -188,6 +216,7 @@
       option.addEventListener('click', () => {
         state.basePath = value;
         updateBasePathTrigger(label);
+        renderCurrentScope();
         setBasePathMenuOpen(false);
       });
       return option;
@@ -211,6 +240,10 @@
     searchBasePathTrigger.setAttribute('aria-label', label);
   }
 
+  function renderCurrentScope() {
+    searchCurrentScope.textContent = `当前目录：${state.basePath || '全部已授权目录'}`;
+  }
+
   function renderSearchStatus() {
     const quick = state.searchStatus?.quickBackend;
     const indexer = state.searchStatus?.quickIndexer;
@@ -225,13 +258,6 @@
     if (!query) {
       throw new Error('请输入要搜索的关键词');
     }
-
-    const limit = clampNumber(
-      state.mode === 'live' ? state.searchOptions.liveLimit : state.searchOptions.quickLimit,
-      10,
-      200,
-      50,
-    );
     searchSubmitButton.loading = true;
     searchResultMeta.textContent = '搜索中';
 
@@ -243,17 +269,66 @@
           mode: state.mode,
           query,
           basePath: state.basePath,
-          limit,
+          limit: 0,
         }),
       });
 
-      state.results = Array.isArray(response.items) ? response.items : [];
-      state.selectedPath = state.results[0]?.path || '';
-      renderResults();
-      renderSelection(state.results[0] || null);
-      searchResultMeta.textContent = `${shortCommandName(response.backend)} 返回 ${response.total} 项结果`;
+      state.rawResults = Array.isArray(response.items) ? response.items : [];
+      applyResultView({
+        backend: shortCommandName(response.backend),
+        total: Number(response.total || state.rawResults.length),
+      });
     } finally {
       searchSubmitButton.loading = false;
+    }
+  }
+
+  function renderResultControls() {
+    searchTypeFilterGroup.value = state.resultFilter;
+    searchSortSelect.value = state.resultSort;
+    searchSortDirection.value = state.resultDirection;
+  }
+
+  function applyResultView(context = null) {
+    const filtered = state.rawResults
+      .filter((item) => {
+        if (state.resultFilter === 'directory') {
+          return item.type === 'directory';
+        }
+        if (state.resultFilter === 'file') {
+          return item.type === 'file';
+        }
+        return true;
+      })
+      .slice();
+
+    if (state.resultSort === 'size') {
+      filtered.sort((a, b) => Number(a.size || 0) - Number(b.size || 0));
+    } else if (state.resultSort === 'mtime') {
+      filtered.sort((a, b) => Date.parse(a.mtime || 0) - Date.parse(b.mtime || 0));
+    } else if (state.resultSort === 'name') {
+      filtered.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'));
+    }
+
+    if (state.resultSort !== 'relevance' && state.resultDirection === 'desc') {
+      filtered.reverse();
+    }
+
+    state.results = filtered;
+    if (!filtered.some((item) => item.path === state.selectedPath)) {
+      state.selectedPath = filtered[0]?.path || '';
+    }
+    renderResultControls();
+    renderResults();
+    void renderSelection(filtered.find((item) => item.path === state.selectedPath) || null);
+
+    if (context) {
+      const total = context.total ?? state.rawResults.length;
+      const filteredLabel =
+        filtered.length === total ? `${total} 项结果` : `${total} 项结果，当前显示 ${filtered.length} 项`;
+      searchResultMeta.textContent = `${context.backend || '搜索'} 返回 ${filteredLabel}`;
+    } else if (!filtered.length && state.rawResults.length) {
+      searchResultMeta.textContent = '当前筛选条件下没有结果';
     }
   }
 
@@ -336,15 +411,16 @@
       button.addEventListener('click', () => {
         state.selectedPath = button.dataset.path || '';
         renderResults();
-        renderSelection(state.results.find((item) => item.path === state.selectedPath) || null);
+        void renderSelection(state.results.find((item) => item.path === state.selectedPath) || null);
       });
     });
   }
 
-  function renderSelection(item) {
+  async function renderSelection(item) {
     if (!item) {
       searchSelection.className = 'selection-empty';
       searchSelection.textContent = '点击左侧结果查看详情';
+      renderChildren([]);
       return;
     }
 
@@ -370,6 +446,61 @@
         </div>
       </div>
     `;
+
+    if (item.type === 'directory') {
+      try {
+        const response = await fetchJson(`/api/search/children?path=${encodeURIComponent(item.path)}`);
+        state.selectedChildren = Array.isArray(response.items) ? response.items : [];
+        renderChildren(state.selectedChildren);
+      } catch (error) {
+        renderChildren([], error.message || '读取目录内容失败');
+      }
+      return;
+    }
+
+    state.selectedChildren = [];
+    renderChildren([]);
+  }
+
+  function renderChildren(items, errorMessage = '') {
+    if (errorMessage) {
+      searchChildrenList.className = 'list-empty';
+      searchChildrenList.textContent = errorMessage;
+      return;
+    }
+
+    if (!items.length) {
+      searchChildrenList.className = 'list-empty';
+      searchChildrenList.textContent = state.selectedPath ? '当前未选中文件夹或目录为空' : '当前未选中文件夹';
+      return;
+    }
+
+    searchChildrenList.className = '';
+    searchChildrenList.innerHTML = items
+      .map(
+        (item) => `
+          <button class="list-row" type="button" data-path="${escapeHtml(item.path)}">
+            <div>
+              <strong>${escapeHtml(item.name || item.path)}</strong>
+              <div class="list-meta">${item.type === 'directory' ? '目录' : '文件'} / ${formatTime(item.mtime)}</div>
+            </div>
+            <strong>${formatBytes(item.size || 0)}</strong>
+          </button>
+        `,
+      )
+      .join('');
+
+    searchChildrenList.querySelectorAll('[data-path]').forEach((button) => {
+      button.addEventListener('click', () => {
+        const nextPath = button.dataset.path || '';
+        const nextItem = state.selectedChildren.find((item) => item.path === nextPath);
+        if (!nextItem) {
+          return;
+        }
+        state.selectedPath = nextPath;
+        void renderSelection(nextItem);
+      });
+    });
   }
 
   async function fetchJson(url, options) {
@@ -435,6 +566,20 @@
       return fallback;
     }
     return Math.max(min, Math.min(max, Math.round(parsed)));
+  }
+
+  function normalizeResultFilter(value) {
+    return value === 'directory' || value === 'file' ? value : 'all';
+  }
+
+  function normalizeResultSort(value) {
+    return ['relevance', 'size', 'mtime', 'name'].includes(value)
+      ? value
+      : 'relevance';
+  }
+
+  function normalizeSortDirection(value) {
+    return value === 'asc' ? 'asc' : 'desc';
   }
 
   function delay(ms) {
