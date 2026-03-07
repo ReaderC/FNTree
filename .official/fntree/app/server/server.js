@@ -115,12 +115,14 @@ function syncSettingsFromEnv() {
     return;
   }
 
+  const current = fs.existsSync(SETTINGS_FILE) ? readSettings() : defaultSettings();
   fs.writeFileSync(
     SETTINGS_FILE,
     JSON.stringify(
       normalizeSettings({
-        accessiblePaths: envPaths,
-        updatedAt: new Date().toISOString(),
+        ...current,
+        accessiblePaths: envPaths.length ? envPaths : current.accessiblePaths,
+        updatedAt: current.updatedAt || new Date().toISOString(),
       }),
       null,
       2,
@@ -889,11 +891,11 @@ function getSearchStatus() {
 
 function detectBinary(candidates) {
   for (const candidate of candidates) {
-    const available = isExecutableCommand(candidate);
-    if (available) {
+    const resolved = resolveExecutableCommand(candidate);
+    if (resolved) {
       return {
         available: true,
-        command: candidate,
+        command: resolved,
       };
     }
   }
@@ -904,16 +906,39 @@ function detectBinary(candidates) {
   };
 }
 
-function isExecutableCommand(command) {
+function resolveExecutableCommand(command) {
   if (!command) {
-    return false;
+    return '';
   }
 
   if (path.isAbsolute(command)) {
-    return fs.existsSync(command);
+    try {
+      fs.accessSync(command, fs.constants.X_OK);
+      return command;
+    } catch {
+      return '';
+    }
   }
 
-  return true;
+  const pathValue = process.env.PATH || '';
+  const searchDirs = pathValue.split(path.delimiter).filter(Boolean);
+  const extensions = process.platform === 'win32'
+    ? (process.env.PATHEXT || '.EXE;.CMD;.BAT;.COM').split(';').filter(Boolean)
+    : [''];
+
+  for (const directory of searchDirs) {
+    for (const extension of extensions) {
+      const candidate = path.join(directory, `${command}${extension}`);
+      try {
+        fs.accessSync(candidate, fs.constants.X_OK);
+        return candidate;
+      } catch {
+        // Ignore missing PATH entries and continue searching.
+      }
+    }
+  }
+
+  return '';
 }
 
 async function searchPaths(options) {
@@ -1129,7 +1154,11 @@ function maybeScheduleSearchIndexRefresh(settings) {
   const intervalHours = settings.searchOptions?.indexIntervalHours || 24;
   const meta = readSearchIndexMeta();
   const lastUpdatedAt = meta.updatedAt ? Date.parse(meta.updatedAt) : 0;
-  const expired = !lastUpdatedAt || Date.now() - lastUpdatedAt >= intervalHours * 60 * 60 * 1000;
+  if (!lastUpdatedAt) {
+    return;
+  }
+
+  const expired = Date.now() - lastUpdatedAt >= intervalHours * 60 * 60 * 1000;
   if (expired) {
     startSearchReindex(settings, 'scheduled');
   }
@@ -1183,48 +1212,114 @@ async function reindexSearchDatabases(settings, source) {
   const entries = [];
   const seen = new Set();
   for (const accessiblePath of accessiblePaths) {
-    const args = [
-      '--absolute-path',
-      '--color',
-      'never',
-      '--hidden',
-      '--follow',
-      '--strip-cwd-prefix',
-      '.',
-      accessiblePath,
-    ];
-    const result = await runCommand(fd.command, args, {
-      maxOutputBytes: 64 * 1024 * 1024,
-    });
-
-    const paths = splitCommandOutput(result.stdout);
+    log(`search reindex scanning ${accessiblePath}`);
+    const paths = await collectFdIndexPaths(fd.command, accessiblePath);
     for (const candidate of paths) {
-      const resolved = path.resolve(candidate);
-      if (seen.has(resolved)) {
-        continue;
-      }
-
-      let stats;
-      try {
-        stats = fs.statSync(resolved);
-      } catch {
-        continue;
-      }
-
-      seen.add(resolved);
-      entries.push({
-        path: resolved,
-        type: stats.isDirectory() ? 'directory' : 'file',
-      });
+      pushIndexedEntry(entries, seen, candidate);
     }
   }
 
   fs.writeFileSync(SEARCH_INDEX_FILE, JSON.stringify(entries));
+  log(`search reindex completed with ${entries.length} entries`);
   writeSearchIndexMeta({
     updatedAt: new Date().toISOString(),
     entryCount: entries.length,
     lastError: '',
     source,
+  });
+}
+
+function pushIndexedEntry(entries, seen, candidate) {
+  const resolved = path.resolve(candidate);
+  if (seen.has(resolved)) {
+    return;
+  }
+
+  let stats;
+  try {
+    stats = fs.statSync(resolved);
+  } catch {
+    return;
+  }
+
+  seen.add(resolved);
+  entries.push({
+    path: resolved,
+    type: stats.isDirectory() ? 'directory' : 'file',
+  });
+}
+
+async function collectFdIndexPaths(command, accessiblePath) {
+  const attempts = [
+    {
+      args: ['--absolute-path', '--color', 'never', '--hidden', '--follow', '.', accessiblePath],
+      cwd: TEMP_ROOT,
+      normalize: (items) => items.map((item) => path.resolve(item)),
+    },
+    {
+      args: ['--color', 'never', '--hidden', '--follow', '.'],
+      cwd: accessiblePath,
+      normalize: (items) => items.map((item) => path.resolve(accessiblePath, item)),
+    },
+  ];
+  const failures = [];
+
+  for (const attempt of attempts) {
+    try {
+      const items = await collectFdLines(command, attempt.args, attempt.cwd);
+      return attempt.normalize(items);
+    } catch (error) {
+      failures.push(`${command} ${attempt.args.join(' ')} (${attempt.cwd}): ${error.message}`);
+    }
+  }
+
+  throw new Error(`fd indexing failed for ${accessiblePath}: ${failures.join(' | ')}`);
+}
+
+function collectFdLines(command, args, cwd) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      env: process.env,
+    });
+
+    const items = [];
+    let stderr = '';
+    let pending = '';
+
+    child.stdout.on('data', (chunk) => {
+      pending += chunk.toString();
+      const lines = pending.split(/\r?\n/);
+      pending = lines.pop() || '';
+      for (const line of lines) {
+        const value = line.trim();
+        if (value) {
+          items.push(value);
+        }
+      }
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+
+    child.on('error', (error) => {
+      reject(error);
+    });
+
+    child.on('close', (code) => {
+      const tail = pending.trim();
+      if (tail) {
+        items.push(tail);
+      }
+
+      if (code !== 0) {
+        reject(new Error(stderr.trim() || `${command} exited with code ${code}`));
+        return;
+      }
+
+      resolve(items);
+    });
   });
 }
 

@@ -132,6 +132,54 @@
             <span id="searchIndexUpdatedAt" class="settings-help">尚未建立索引</span>
           </label>
 
+          <label class="settings-card settings-card-stack">
+            <span class="settings-label">快速搜索结果上限</span>
+            <span class="settings-help">用于默认快速搜索返回的最大结果数，范围 10 到 200。</span>
+            <div class="stepper" aria-label="快速搜索结果上限">
+              <button id="quickLimitDecrease" class="stepper-button" type="button" aria-label="减少 10">
+                -10
+              </button>
+              <input
+                id="settingQuickLimit"
+                class="stepper-input"
+                type="number"
+                min="10"
+                max="200"
+                step="10"
+                inputmode="numeric"
+                value="50"
+                aria-label="快速搜索结果上限"
+              >
+              <button id="quickLimitIncrease" class="stepper-button" type="button" aria-label="增加 10">
+                +10
+              </button>
+            </div>
+          </label>
+
+          <label class="settings-card settings-card-stack">
+            <span class="settings-label">实时搜索结果上限</span>
+            <span class="settings-help">用于默认实时搜索返回的最大结果数，范围 10 到 200。</span>
+            <div class="stepper" aria-label="实时搜索结果上限">
+              <button id="liveLimitDecrease" class="stepper-button" type="button" aria-label="减少 10">
+                -10
+              </button>
+              <input
+                id="settingLiveLimit"
+                class="stepper-input"
+                type="number"
+                min="10"
+                max="200"
+                step="10"
+                inputmode="numeric"
+                value="50"
+                aria-label="实时搜索结果上限"
+              >
+              <button id="liveLimitIncrease" class="stepper-button" type="button" aria-label="增加 10">
+                +10
+              </button>
+            </div>
+          </label>
+
           <label class="settings-card settings-card-toggle">
             <span class="settings-copy">
               <span class="settings-label">忽略隐藏目录</span>

@@ -2,9 +2,10 @@
   'use strict';
 
   const searchModeGroup = document.getElementById('searchModeGroup');
-  const searchBasePath = document.getElementById('searchBasePath');
+  const searchBasePathTrigger = document.getElementById('searchBasePathTrigger');
+  const searchBasePathLabel = document.getElementById('searchBasePathLabel');
+  const searchBasePathMenu = document.getElementById('searchBasePathMenu');
   const searchQuery = document.getElementById('searchQuery');
-  const searchLimit = document.getElementById('searchLimit');
   const searchSubmitButton = document.getElementById('searchSubmitButton');
   const searchResetButton = document.getElementById('searchResetButton');
   const searchSummary = document.getElementById('searchSummary');
@@ -17,9 +18,10 @@
 
   if (
     !searchModeGroup ||
-    !searchBasePath ||
+    !searchBasePathTrigger ||
+    !searchBasePathLabel ||
+    !searchBasePathMenu ||
     !searchQuery ||
-    !searchLimit ||
     !searchSubmitButton ||
     !searchResetButton ||
     !searchSummary ||
@@ -46,6 +48,8 @@
     theme: 'cinnamon',
     mode: 'quick',
     accessiblePaths: [],
+    basePath: '',
+    basePathMenuOpen: false,
     results: [],
     selectedPath: '',
     searchStatus: null,
@@ -63,8 +67,29 @@
     button.addEventListener('click', () => {
       state.mode = button.dataset.mode === 'live' ? 'live' : 'quick';
       renderModeButtons();
-      updateLimitFromSettings();
     });
+  });
+
+  searchBasePathTrigger.addEventListener('click', () => {
+    if (!state.accessiblePaths.length) {
+      return;
+    }
+    renderBasePathMenu();
+    setBasePathMenuOpen(!state.basePathMenuOpen);
+  });
+
+  document.addEventListener('click', (event) => {
+    if (!state.basePathMenuOpen) {
+      return;
+    }
+    const target = event.target;
+    if (
+      target instanceof Node &&
+      !searchBasePathTrigger.contains(target) &&
+      !searchBasePathMenu.contains(target)
+    ) {
+      setBasePathMenuOpen(false);
+    }
   });
 
   searchSubmitButton.addEventListener('click', () => {
@@ -80,7 +105,6 @@
     renderResults();
     renderSelection(null);
     searchResultMeta.textContent = '已清空结果';
-    searchSummary.textContent = '等待下一次搜索';
   });
 
   searchQuery.addEventListener('keydown', (event) => {
@@ -123,7 +147,10 @@
     state.theme = settings.theme || 'cinnamon';
     state.accessiblePaths = Array.isArray(settings.accessiblePaths) ? settings.accessiblePaths : [];
     state.searchStatus = settings.searchStatus || null;
-    state.searchOptions = settings.searchOptions || state.searchOptions;
+    state.searchOptions = {
+      ...state.searchOptions,
+      ...(settings.searchOptions || {}),
+    };
     applyTheme(state.theme);
     writeSettingsSnapshot(settings);
 
@@ -131,8 +158,7 @@
     renderModeButtons();
     renderAccessiblePaths();
     renderSearchStatus();
-    updateLimitFromSettings();
-    searchSummary.textContent = '已加载搜索能力，输入关键词即可搜索';
+    searchSummary.hidden = true;
   }
 
   function renderModeButtons() {
@@ -144,18 +170,45 @@
   }
 
   function renderAccessiblePaths() {
-    searchBasePath.innerHTML = '';
-    const allOption = document.createElement('option');
-    allOption.value = '';
-    allOption.textContent = '全部已授权目录';
-    searchBasePath.appendChild(allOption);
+    state.basePath = '';
+    searchBasePathMenu.innerHTML = '';
+    updateBasePathTrigger('全部已授权目录');
+    renderBasePathMenu();
+  }
 
+  function renderBasePathMenu() {
+    searchBasePathMenu.innerHTML = '';
+
+    const createOption = (label, value) => {
+      const option = document.createElement('button');
+      option.className = 'path-picker-option';
+      option.type = 'button';
+      option.textContent = label;
+      option.dataset.path = value;
+      option.addEventListener('click', () => {
+        state.basePath = value;
+        updateBasePathTrigger(label);
+        setBasePathMenuOpen(false);
+      });
+      return option;
+    };
+
+    searchBasePathMenu.appendChild(createOption('全部已授权目录', ''));
     for (const item of state.accessiblePaths) {
-      const option = document.createElement('option');
-      option.value = item;
-      option.textContent = item;
-      searchBasePath.appendChild(option);
+      searchBasePathMenu.appendChild(createOption(item, item));
     }
+  }
+
+  function setBasePathMenuOpen(open) {
+    state.basePathMenuOpen = open;
+    searchBasePathMenu.hidden = !open;
+    searchBasePathTrigger.classList.toggle('is-open', open);
+  }
+
+  function updateBasePathTrigger(label) {
+    searchBasePathLabel.textContent = label;
+    searchBasePathTrigger.setAttribute('title', label);
+    searchBasePathTrigger.setAttribute('aria-label', label);
   }
 
   function renderSearchStatus() {
@@ -167,24 +220,19 @@
     window.__fntreeSearchStatusUpdate?.(state.searchStatus);
   }
 
-  function updateLimitFromSettings() {
-    const fallback = state.mode === 'live' ? state.searchOptions.liveLimit : state.searchOptions.quickLimit;
-    const current = Number(searchLimit.value);
-    if (!Number.isFinite(current) || current < 10 || current > 200) {
-      searchLimit.value = String(Number(fallback) || 50);
-    }
-  }
-
   async function runSearch() {
     const query = searchQuery.value.trim();
     if (!query) {
       throw new Error('请输入要搜索的关键词');
     }
 
-    const limit = clampNumber(searchLimit.value, 10, 200, 50);
-    searchLimit.value = String(limit);
+    const limit = clampNumber(
+      state.mode === 'live' ? state.searchOptions.liveLimit : state.searchOptions.quickLimit,
+      10,
+      200,
+      50,
+    );
     searchSubmitButton.loading = true;
-    searchSummary.textContent = state.mode === 'live' ? '正在执行实时搜索' : '正在执行快速搜索';
     searchResultMeta.textContent = '搜索中';
 
     try {
@@ -194,7 +242,7 @@
         body: JSON.stringify({
           mode: state.mode,
           query,
-          basePath: searchBasePath.value,
+          basePath: state.basePath,
           limit,
         }),
       });
@@ -204,8 +252,6 @@
       renderResults();
       renderSelection(state.results[0] || null);
       searchResultMeta.textContent = `${shortCommandName(response.backend)} 返回 ${response.total} 项结果`;
-      searchSummary.textContent =
-        response.total > 0 ? `搜索完成，共 ${response.total} 项` : '没有找到符合条件的结果';
     } finally {
       searchSubmitButton.loading = false;
     }
@@ -218,7 +264,6 @@
 
   async function rebuildSearchIndex() {
     searchReindexButton.disabled = true;
-      searchSummary.textContent = '正在发起 fd 索引重建';
 
     try {
       const response = await fetchJson('/api/search/reindex', { method: 'POST' });
@@ -226,7 +271,6 @@
         state.searchStatus = response.searchStatus;
         renderSearchStatus();
       }
-      searchSummary.textContent = '索引重建已启动，正在轮询进度';
       await waitForReindexCompletion();
     } finally {
       searchReindexButton.disabled = false;
@@ -243,27 +287,21 @@
       const index = state.searchStatus?.index;
 
       if (index?.running) {
-        searchSummary.textContent = '索引构建中，请稍候';
         continue;
       }
 
       if (index?.lastError) {
-        searchSummary.textContent = `索引重建失败：${index.lastError}`;
         showError(`索引重建失败：${index.lastError}`);
         return;
       }
 
       if (index?.updatedAt) {
-        searchSummary.textContent = `索引重建完成：${formatTime(index.updatedAt)}`;
         showMessage('索引重建完成');
         return;
       }
 
-      searchSummary.textContent = '索引重建未产出数据库，请检查权限或路径';
       return;
     }
-
-    searchSummary.textContent = '索引构建超时，请稍后刷新状态';
   }
 
   function renderResults() {
@@ -277,13 +315,13 @@
     searchResultList.innerHTML = state.results
       .map((item) => {
         const selected = item.path === state.selectedPath ? ' is-selected' : '';
+        const name = item.name || item.path;
+        const metaText = `${item.type === 'directory' ? '目录' : '文件'} / ${item.parent || ''}`;
         return `
-          <button class="search-result-item${selected}" type="button" data-path="${escapeHtml(item.path)}">
+          <button class="search-result-item${selected}" type="button" data-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">
             <div class="search-result-main">
-              <div class="search-result-name">${escapeHtml(item.name || item.path)}</div>
-              <div class="search-result-meta">${item.type === 'directory' ? '目录' : '文件'} / ${escapeHtml(
-                item.parent || '',
-              )}</div>
+              <div class="search-result-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+              <div class="search-result-meta" title="${escapeHtml(metaText)}">${escapeHtml(metaText)}</div>
             </div>
             <div class="search-result-side">
               <div class="search-result-size">${formatBytes(item.size || 0)}</div>
@@ -312,7 +350,7 @@
 
     searchSelection.className = 'search-selection';
     searchSelection.innerHTML = `
-      <div class="selection-path">${escapeHtml(item.path)}</div>
+      <div class="selection-path" title="${escapeHtml(item.path)}">${escapeHtml(item.path)}</div>
       <div class="detail-grid">
         <div class="detail-card">
           <span>类型</span>

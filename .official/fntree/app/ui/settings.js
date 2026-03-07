@@ -26,6 +26,12 @@ const settingSearchIndexInterval = document.getElementById('settingSearchIndexIn
 const searchIndexIntervalDecrease = document.getElementById('searchIndexIntervalDecrease');
 const searchIndexIntervalIncrease = document.getElementById('searchIndexIntervalIncrease');
 const searchIndexUpdatedAt = document.getElementById('searchIndexUpdatedAt');
+const settingQuickLimit = document.getElementById('settingQuickLimit');
+const quickLimitDecrease = document.getElementById('quickLimitDecrease');
+const quickLimitIncrease = document.getElementById('quickLimitIncrease');
+const settingLiveLimit = document.getElementById('settingLiveLimit');
+const liveLimitDecrease = document.getElementById('liveLimitDecrease');
+const liveLimitIncrease = document.getElementById('liveLimitIncrease');
 const saveSettingsButton = document.getElementById('saveSettingsButton');
 const settingsStatus = document.getElementById('settingsStatus');
 
@@ -35,6 +41,8 @@ const settingsState = {
   topLimit: 30,
   treemapMaxVisible: 24,
   searchIndexIntervalHours: 24,
+  quickLimit: 50,
+  liveLimit: 50,
 };
 
 bootstrap().catch((error) => {
@@ -114,6 +122,34 @@ settingSearchIndexInterval.addEventListener('input', () => {
   );
 });
 
+quickLimitDecrease.addEventListener('click', () => {
+  settingsState.quickLimit = Math.max(10, settingsState.quickLimit - 10);
+  renderQuickLimit();
+});
+
+quickLimitIncrease.addEventListener('click', () => {
+  settingsState.quickLimit = Math.min(200, settingsState.quickLimit + 10);
+  renderQuickLimit();
+});
+
+settingQuickLimit.addEventListener('input', () => {
+  settingsState.quickLimit = clampNumber(settingQuickLimit.value, 10, 200, settingsState.quickLimit);
+});
+
+liveLimitDecrease.addEventListener('click', () => {
+  settingsState.liveLimit = Math.max(10, settingsState.liveLimit - 10);
+  renderLiveLimit();
+});
+
+liveLimitIncrease.addEventListener('click', () => {
+  settingsState.liveLimit = Math.min(200, settingsState.liveLimit + 10);
+  renderLiveLimit();
+});
+
+settingLiveLimit.addEventListener('input', () => {
+  settingsState.liveLimit = clampNumber(settingLiveLimit.value, 10, 200, settingsState.liveLimit);
+});
+
 async function bootstrap() {
   const cachedSettings = readCachedSettings();
   if (cachedSettings) {
@@ -134,6 +170,8 @@ function hydrateSettings(settings) {
   settingsState.topLimit = Number(scanOptions.topLimit || 30);
   settingsState.treemapMaxVisible = Number(scanOptions.treemapMaxVisible || 24);
   settingsState.searchIndexIntervalHours = Number(settings.searchOptions?.indexIntervalHours || 24);
+  settingsState.quickLimit = Number(settings.searchOptions?.quickLimit || 50);
+  settingsState.liveLimit = Number(settings.searchOptions?.liveLimit || 50);
   settingIgnoreHidden.checked = Boolean(scanOptions.ignoreHidden);
   settingNoCross.checked = Boolean(scanOptions.noCross);
   settingFollowSymlinks.checked = Boolean(scanOptions.followSymlinks);
@@ -144,6 +182,8 @@ function hydrateSettings(settings) {
   renderTopLimit();
   renderTreemapVisible();
   renderSearchIndexInterval();
+  renderQuickLimit();
+  renderLiveLimit();
   applyTheme(settingsState.theme);
   writeCachedSettings(settings);
 }
@@ -202,6 +242,14 @@ function renderSearchIndexInterval() {
   settingSearchIndexInterval.value = String(settingsState.searchIndexIntervalHours);
 }
 
+function renderQuickLimit() {
+  settingQuickLimit.value = String(settingsState.quickLimit);
+}
+
+function renderLiveLimit() {
+  settingLiveLimit.value = String(settingsState.liveLimit);
+}
+
 async function saveSettings() {
   const topLimit = Number(settingsState.topLimit || 0);
   if (!Number.isInteger(topLimit) || topLimit <= 0) {
@@ -215,6 +263,14 @@ async function saveSettings() {
   const searchIndexIntervalHours = Number(settingsState.searchIndexIntervalHours || 0);
   if (!Number.isInteger(searchIndexIntervalHours) || searchIndexIntervalHours < 1 || searchIndexIntervalHours > 168) {
     throw new Error('搜索索引周期必须在 1 到 168 小时之间');
+  }
+  const quickLimit = Number(settingsState.quickLimit || 0);
+  if (!Number.isInteger(quickLimit) || quickLimit < 10 || quickLimit > 200) {
+    throw new Error('快速搜索结果上限必须在 10 到 200 之间');
+  }
+  const liveLimit = Number(settingsState.liveLimit || 0);
+  if (!Number.isInteger(liveLimit) || liveLimit < 10 || liveLimit > 200) {
+    throw new Error('实时搜索结果上限必须在 10 到 200 之间');
   }
 
   saveSettingsButton.disabled = true;
@@ -237,6 +293,8 @@ async function saveSettings() {
         },
         searchOptions: {
           indexIntervalHours: searchIndexIntervalHours,
+          quickLimit,
+          liveLimit,
         },
       }),
     });
