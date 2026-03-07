@@ -8,9 +8,6 @@
   const searchSubmitButton = document.getElementById('searchSubmitButton');
   const searchResetButton = document.getElementById('searchResetButton');
   const searchSummary = document.getElementById('searchSummary');
-  const searchBackendLabel = document.getElementById('searchBackendLabel') || { textContent: '' };
-  const searchBackendMeta = document.getElementById('searchBackendMeta') || { textContent: '' };
-  const searchIndexMeta = document.getElementById('searchIndexMeta') || { textContent: '' };
   const searchResultMeta = document.getElementById('searchResultMeta');
   const searchResultList = document.getElementById('searchResultList');
   const searchSelection = document.getElementById('searchSelection');
@@ -163,14 +160,6 @@
     const indexer = state.searchStatus?.quickIndexer;
     const live = state.searchStatus?.liveBackend;
     const index = state.searchStatus?.index;
-
-    const quickText = quick?.available ? `快速：${shortCommandName(quick.command)}` : '快速：未就绪';
-    const liveText = live?.available ? `实时：${shortCommandName(live.command)}` : '实时：未就绪';
-    const indexText = indexer?.available ? `索引器：${shortCommandName(indexer.command)}` : '索引器：未就绪';
-
-    searchBackendLabel.textContent = quick?.available || live?.available ? '搜索可用' : '搜索受限';
-    searchBackendMeta.textContent = `${quickText} / ${liveText} / ${indexText}`;
-    searchIndexMeta.textContent = formatSearchIndexMeta(index);
     searchReindexButton.disabled = !indexer?.available || Boolean(index?.running);
     window.__fntreeSearchStatusUpdate?.(state.searchStatus);
   }
@@ -222,7 +211,6 @@
   async function refreshSearchStatus() {
     const status = await fetchJson('/api/search/status');
     state.searchStatus = status;
-    window.__fntreeSearchStatusUpdate?.(status);
   }
 
   async function rebuildSearchIndex() {
@@ -389,23 +377,6 @@
       return '-';
     }
     return date.toLocaleString('zh-CN', { hour12: false });
-  }
-
-  function formatSearchIndexMeta(index) {
-    if (!index) {
-      return '等待索引状态';
-    }
-    if (index.running) {
-      return `索引构建中 / 周期 ${index.intervalHours} 小时`;
-    }
-    if (index.lastError) {
-      return `索引失败：${index.lastError}`;
-    }
-    if (!index.updatedAt) {
-      return `尚未建立索引 / 周期 ${index.intervalHours} 小时`;
-    }
-    const label = index.entryCount > 0 ? `${index.entryCount} 条索引` : '空索引';
-    return `最近索引 ${formatTime(index.updatedAt)} / ${label}`;
   }
 
   function shortCommandName(command) {
