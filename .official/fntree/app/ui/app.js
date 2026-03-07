@@ -400,34 +400,6 @@ async function pollTask() {
   await refreshRecentTasks();
 }
 
-function renderTask(task) {
-  if (task.status === 'failed') {
-    taskStatus.textContent = `分析失败: ${task.error || '未知错误'}`;
-    treemapView.className = 'treemap-empty';
-    treemapView.innerHTML = '<div class="treemap-empty">没有可展示的结果</div>';
-    selectionDetails.className = 'selection-empty';
-    selectionDetails.textContent = '没有可展示的结果';
-    childrenList.className = 'list-empty';
-    childrenList.innerHTML = '<div class="list-empty">没有可展示的结果</div>';
-    breadcrumbBar.textContent = '没有结果';
-    detailLevelLabel.textContent = '滚轮细化 0';
-    return;
-  }
-
-  if (task.status === 'completed') {
-    taskStatus.textContent = `分析完成: ${task.path}`;
-    state.rootNode = task.result?.root || null;
-    state.zoomPath = [];
-    state.selectedPath = state.rootNode?.path || null;
-    state.detailLevel = 0;
-    state.layoutCache = new Map();
-    renderWorkspace();
-    return;
-  }
-
-  taskStatus.textContent = `分析中，已读取 ${formatBytes(task.stdoutBytes || 0)}`;
-}
-
 function renderWorkspace() {
   renderSelection();
   renderChildrenList();
@@ -435,111 +407,6 @@ function renderWorkspace() {
   requestAnimationFrame(() => {
     renderTreemapOnly();
   });
-}
-
-function renderTreemapOnly() {
-  const currentNode = getCurrentNode();
-  if (!currentNode) {
-    treemapView.className = 'treemap-empty';
-    treemapView.innerHTML = '<div class="treemap-empty">等待结果</div>';
-    detailLevelLabel.textContent = '滚轮细化 0';
-    return;
-  }
-
-  const entries = (currentNode.children || [])
-    .filter((child) => child.size > 0)
-    .sort((a, b) => b.size - a.size);
-
-  if (!entries.length) {
-    treemapView.className = 'treemap-empty';
-    treemapView.innerHTML = '<div class="treemap-empty">当前节点没有可展示的子项</div>';
-    detailLevelLabel.textContent = '滚轮细化 0';
-    return;
-  }
-
-  treemapView.className = '';
-  const width = treemapView.clientWidth || 860;
-  const height = treemapView.clientHeight || 660;
-  const layout = computeSquarifiedTreemap(entries, { x: 0, y: 0, width, height });
-  const currentTotal = Math.max(currentNode.size || sumNodeSize(entries), 1);
-  detailLevelLabel.textContent = `滚轮细化 ${state.detailLevel}`;
-  patchTreemapNodes(layout, currentTotal);
-}
-
-function patchTreemapNodes(layout, currentTotal) {
-  const nextPaths = new Set(layout.map((item) => item.node.path));
-  const existingNodes = new Map(
-    Array.from(treemapView.querySelectorAll('.treemap-node')).map((element) => [element.dataset.path, element]),
-  );
-
-  layout.forEach((item) => {
-    const path = item.node.path;
-    let element = existingNodes.get(path);
-    const labelMode = getLabelMode(item);
-    const selected = path === state.selectedPath ? ' selected' : '';
-    const previous = state.layoutCache.get(path);
-
-    if (!element) {
-      element = document.createElement('button');
-      element.type = 'button';
-      element.className = 'treemap-node entering';
-      element.dataset.path = path;
-      element.style.opacity = '0';
-      treemapView.append(element);
-      element.addEventListener('click', () => {
-        focusNode(path);
-      });
-      element.addEventListener('mouseenter', handleTreemapTooltipEnter);
-      element.addEventListener('mousemove', handleTreemapTooltipMove);
-      element.addEventListener('mouseleave', hideTreemapTooltip);
-    }
-
-    element.dataset.path = path;
-    element.className = `treemap-node ${labelMode}${selected}`.trim();
-    element.dataset.tooltip = `${item.node.path}\n${formatBytes(item.node.size)} / ${typeText(item.node.type)}`;
-    element.style.background = nodeFill(item.node, currentTotal);
-    element.style.borderRadius = `${computeNodeRadius(item)}px`;
-    element.innerHTML = renderNodeBody(item.node, item, currentTotal, labelMode);
-
-    if (previous) {
-      element.style.left = `${previous.x}px`;
-      element.style.top = `${previous.y}px`;
-      element.style.width = `${previous.width}px`;
-      element.style.height = `${previous.height}px`;
-      element.style.opacity = '1';
-      requestAnimationFrame(() => {
-        element.style.left = `${item.x}px`;
-        element.style.top = `${item.y}px`;
-        element.style.width = `${item.width}px`;
-        element.style.height = `${item.height}px`;
-        element.style.opacity = '1';
-      });
-    } else {
-      element.style.left = `${item.x}px`;
-      element.style.top = `${item.y}px`;
-      element.style.width = `${item.width}px`;
-      element.style.height = `${item.height}px`;
-      requestAnimationFrame(() => {
-        element.style.opacity = '1';
-      });
-    }
-  });
-
-  existingNodes.forEach((element, path) => {
-    if (nextPaths.has(path)) {
-      return;
-    }
-    element.classList.add('leaving');
-    element.style.opacity = '0';
-    element.style.transform = 'scale(0.92)';
-    setTimeout(() => {
-      if (element.parentNode === treemapView) {
-        treemapView.removeChild(element);
-      }
-    }, 220);
-  });
-
-  state.layoutCache = new Map(layout.map((item) => [item.node.path, item]));
 }
 
 function renderNodeBody(node, item, total, labelMode) {
@@ -622,43 +489,6 @@ function getLevelReferenceSize(node) {
     return currentNode.size || 0;
   }
   return findParentNode(state.rootNode, node.path)?.size || currentNode.size || 0;
-}
-
-function renderChildrenList() {
-  const node = getCurrentNode();
-  if (!node) {
-    childrenList.className = 'list-empty';
-    childrenList.innerHTML = '<div class="list-empty">等待结果</div>';
-    return;
-  }
-
-  const items = (node.children || []).slice().sort((a, b) => b.size - a.size);
-  if (!items.length) {
-    childrenList.className = 'list-empty';
-    childrenList.innerHTML = '<div class="list-empty">当前层级没有子项</div>';
-    return;
-  }
-
-  childrenList.className = '';
-  childrenList.innerHTML = items
-    .map(
-      (item) => `
-        <button class="list-row interactive-row" type="button" data-path="${escapeAttribute(item.path)}">
-          <div class="list-main">
-            <div class="list-path">${escapeHtml(item.name)}</div>
-            <div class="list-size">${formatBytes(item.size)}</div>
-          </div>
-          <div class="list-meta">${typeText(item.type)} / ${formatCount(item)}</div>
-        </button>
-      `,
-    )
-    .join('');
-
-  childrenList.querySelectorAll('[data-path]').forEach((button) => {
-    button.addEventListener('click', () => {
-      focusNode(button.dataset.path);
-    });
-  });
 }
 
 function renderBreadcrumb() {
@@ -831,10 +661,6 @@ function computeSquarifiedTreemap(nodes, rect) {
   }));
 
   return layoutTreemapBinary(items, rect);
-}
-
-function getVisibleTreemapCount(totalNodes) {
-  return Math.max(10, Math.min(TREEMAP_MAX_VISIBLE, totalNodes));
 }
 
 function rebalanceDisplayWeights(nodes) {
@@ -1200,36 +1026,6 @@ function renderTask(task) {
   }
 }
 
-function renderTreemapOnly() {
-  const currentNode = getCurrentNode();
-  if (!currentNode) {
-    treemapView.className = 'treemap-empty';
-    treemapView.innerHTML = '<div class="treemap-empty">等待结果</div>';
-    detailLevelLabel.textContent = '滚轮细化 0';
-    return;
-  }
-
-  const entries = (currentNode.children || [])
-    .filter((child) => matchesTreemapFilter(child))
-    .filter((child) => child.size > 0)
-    .sort((a, b) => b.size - a.size);
-
-  if (!entries.length) {
-    treemapView.className = 'treemap-empty';
-    treemapView.innerHTML = '<div class="treemap-empty">当前筛选下没有可展示的子项</div>';
-    detailLevelLabel.textContent = '滚轮细化 0';
-    return;
-  }
-
-  treemapView.className = '';
-  const width = treemapView.clientWidth || 860;
-  const height = treemapView.clientHeight || 660;
-  const layout = computeSquarifiedTreemap(entries, { x: 0, y: 0, width, height });
-  const currentTotal = Math.max(entries[0]?.size || sumNodeSize(entries), 1);
-  detailLevelLabel.textContent = `滚轮细化 ${state.detailLevel}`;
-  patchTreemapNodes(layout, currentTotal);
-}
-
 function renderChildrenList() {
   const node = getCurrentNode();
   if (!node) {
@@ -1367,47 +1163,6 @@ function writeCacheItem(key, value) {
   } catch {
     // Ignore cache failures.
   }
-}
-
-function mix(baseHex, accentHex, amount) {
-  const base = hexToRgb(baseHex);
-  const accent = hexToRgb(accentHex);
-  const ratio = Math.max(0, Math.min(1, amount));
-  return rgbToHex({
-    r: Math.round(base.r + (accent.r - base.r) * ratio),
-    g: Math.round(base.g + (accent.g - base.g) * ratio),
-    b: Math.round(base.b + (accent.b - base.b) * ratio),
-  });
-}
-
-function withAlpha(hex, alpha) {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function hexToRgb(hex) {
-  const clean = String(hex || '')
-    .trim()
-    .replace('#', '');
-  const normalized =
-    clean.length === 3
-      ? clean
-          .split('')
-          .map((char) => `${char}${char}`)
-          .join('')
-      : clean;
-  const value = Number.parseInt(normalized, 16);
-  return {
-    r: (value >> 16) & 255,
-    g: (value >> 8) & 255,
-    b: value & 255,
-  };
-}
-
-function rgbToHex({ r, g, b }) {
-  return `#${[r, g, b]
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('')}`;
 }
 
 async function exportCurrentResult() {
