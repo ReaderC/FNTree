@@ -1,9 +1,13 @@
-const SETTINGS_CACHE_KEY = 'fntree.settings';
-const THEME_PRESETS = {
-  cinnamon: { label: '暖棕', accent: '#8d4f22', soft: '#f2d3b4' },
-  slate: { label: '石墨', accent: '#55606f', soft: '#d7dde5' },
-  forest: { label: '森林', accent: '#2f6f4f', soft: '#cde7da' },
-  ocean: { label: '海蓝', accent: '#2b6e9a', soft: '#cfe5f4' },
+﻿const themeRuntime = window.FNTreeTheme || {};
+const THEME_PRESETS = themeRuntime.presets || {};
+const applyTheme = (themeName, options) =>
+  themeRuntime.applyTheme ? themeRuntime.applyTheme(themeName, options) : themeName;
+const readCachedSettings = () =>
+  themeRuntime.readSettingsSnapshot ? themeRuntime.readSettingsSnapshot() : null;
+const writeCachedSettings = (settings) => {
+  if (themeRuntime.writeSettingsSnapshot) {
+    themeRuntime.writeSettingsSnapshot(settings);
+  }
 };
 
 const settingTheme = document.getElementById('settingTheme');
@@ -47,7 +51,7 @@ settingTheme.querySelectorAll('[data-value]').forEach((button) => {
   button.addEventListener('click', () => {
     settingsState.theme = button.dataset.value || 'cinnamon';
     renderThemeButtons();
-    applyTheme(settingsState.theme);
+    applyTheme(settingsState.theme, { persist: false });
   });
 });
 
@@ -264,117 +268,6 @@ function formatTime(value) {
   return date.toLocaleString('zh-CN', { hour12: false });
 }
 
-function applyTheme(themeName) {
-  const preset = THEME_PRESETS[themeName] || THEME_PRESETS.cinnamon;
-  const root = document.documentElement;
-  const accentRgb = hexToRgb(preset.accent);
-  const panelMix = mix('#fffaf4', preset.soft, 0.34);
-  const panelStrong = mix('#ffffff', preset.soft, 0.18);
-  root.style.setProperty('--accent', preset.accent);
-  root.style.setProperty('--accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
-  root.style.setProperty('--accent-soft', preset.soft);
-  root.style.setProperty('--panel-bg', withAlpha(panelMix, 0.88));
-  root.style.setProperty('--panel-border', withAlpha(preset.accent, 0.12));
-  root.style.setProperty('--shadow', `0 18px 60px ${withAlpha(preset.accent, 0.12)}`);
-  root.style.setProperty('--accent-faint', withAlpha(preset.accent, 0.03));
-  root.style.setProperty('--accent-soft-bg', withAlpha(preset.accent, 0.08));
-  root.style.setProperty('--accent-soft-bg-strong', withAlpha(preset.accent, 0.1));
-  root.style.setProperty('--accent-soft-bg-muted', withAlpha(preset.accent, 0.05));
-  root.style.setProperty('--accent-selected-start', withAlpha(preset.accent, 0.92));
-  root.style.setProperty('--accent-selected-end', withAlpha(mix('#000000', preset.accent, 0.76), 0.92));
-  root.style.setProperty('--accent-outline', withAlpha(preset.accent, 0.18));
-  root.style.setProperty('--accent-border-strong', withAlpha(preset.accent, 0.42));
-  root.style.setProperty('--card-glow', withAlpha(preset.accent, 0.22));
-  root.style.setProperty('--scrollbar-track', withAlpha(preset.accent, 0.08));
-  root.style.setProperty('--scrollbar-thumb-start', withAlpha(preset.accent, 0.72));
-  root.style.setProperty('--scrollbar-thumb-end', withAlpha(mix('#000000', preset.accent, 0.62), 0.72));
-  root.style.setProperty('--treemap-surface-start', withAlpha(panelStrong, 0.84));
-  root.style.setProperty('--treemap-surface-mid', withAlpha(mix('#fff4e3', preset.soft, 0.44), 0.68));
-  root.style.setProperty('--treemap-surface-end', withAlpha(panelMix, 0.96));
-  root.style.setProperty('--switch-off-bg', withAlpha(preset.accent, 0.2));
-  root.style.setProperty('--switch-on-bg', withAlpha(preset.accent, 0.72));
-  root.style.setProperty(
-    '--page-bg',
-    `linear-gradient(180deg, ${mix('#ffffff', preset.soft, 0.28)} 0%, ${mix(
-      '#f4ecdf',
-      preset.soft,
-      0.42,
-    )} 46%, ${mix('#e5dbc5', preset.soft, 0.24)} 100%)`,
-  );
-
-  if (window.mdui?.setColorScheme) {
-    window.mdui.setColorScheme(preset.accent);
-  }
-}
-
-function readCachedSettings() {
-  try {
-    const raw = window.localStorage.getItem(SETTINGS_CACHE_KEY);
-    if (!raw) {
-      return null;
-    }
-    const parsed = JSON.parse(raw);
-    return parsed?.value || null;
-  } catch {
-    return null;
-  }
-}
-
-function writeCachedSettings(settings) {
-  try {
-    window.localStorage.setItem(
-      SETTINGS_CACHE_KEY,
-      JSON.stringify({
-        updatedAt: Date.now(),
-        value: settings,
-      }),
-    );
-  } catch {
-    // Ignore cache failures.
-  }
-}
-
-function mix(baseHex, accentHex, amount) {
-  const base = hexToRgb(baseHex);
-  const accent = hexToRgb(accentHex);
-  const ratio = Math.max(0, Math.min(1, amount));
-  return rgbToHex({
-    r: Math.round(base.r + (accent.r - base.r) * ratio),
-    g: Math.round(base.g + (accent.g - base.g) * ratio),
-    b: Math.round(base.b + (accent.b - base.b) * ratio),
-  });
-}
-
-function withAlpha(hex, alpha) {
-  const { r, g, b } = hexToRgb(hex);
-  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-}
-
-function hexToRgb(hex) {
-  const clean = String(hex || '')
-    .trim()
-    .replace('#', '');
-  const normalized =
-    clean.length === 3
-      ? clean
-          .split('')
-          .map((char) => `${char}${char}`)
-          .join('')
-      : clean;
-  const value = Number.parseInt(normalized, 16);
-  return {
-    r: (value >> 16) & 255,
-    g: (value >> 8) & 255,
-    b: value & 255,
-  };
-}
-
-function rgbToHex({ r, g, b }) {
-  return `#${[r, g, b]
-    .map((value) => value.toString(16).padStart(2, '0'))
-    .join('')}`;
-}
-
 async function fetchJson(url, options) {
   const response = await fetch(url, options);
   const data = await response.json().catch(() => ({}));
@@ -396,3 +289,4 @@ function showError(message) {
   settingsStatus.textContent = message;
   showMessage(message);
 }
+

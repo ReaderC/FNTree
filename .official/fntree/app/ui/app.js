@@ -20,11 +20,17 @@ const SETTINGS_CACHE_KEY = 'fntree.settings';
 const HEALTH_CACHE_KEY = 'fntree.health';
 const TASKS_CACHE_KEY = 'fntree.tasks';
 const CACHE_TTL_MS = 5 * 60 * 1000;
-const THEME_PRESETS = {
-  cinnamon: { accent: '#8d4f22', soft: '#f2d3b4' },
-  slate: { accent: '#55606f', soft: '#d7dde5' },
-  forest: { accent: '#2f6f4f', soft: '#cde7da' },
-  ocean: { accent: '#2b6e9a', soft: '#cfe5f4' },
+const themeRuntime = window.FNTreeTheme || {};
+const applyTheme = (themeName, options) =>
+  themeRuntime.applyTheme ? themeRuntime.applyTheme(themeName, options) : themeName;
+const readSettingsSnapshot = () =>
+  themeRuntime.readSettingsSnapshot ? themeRuntime.readSettingsSnapshot() : readCacheItem(SETTINGS_CACHE_KEY);
+const writeSettingsSnapshot = (settings) => {
+  if (themeRuntime.writeSettingsSnapshot) {
+    themeRuntime.writeSettingsSnapshot(settings);
+    return;
+  }
+  writeCacheItem(SETTINGS_CACHE_KEY, settings);
 };
 
 const pathInput = document.getElementById('pathInput');
@@ -209,7 +215,7 @@ treemapView.addEventListener(
 );
 
 async function bootstrap() {
-  const cachedSettings = readCacheItem(SETTINGS_CACHE_KEY);
+  const cachedSettings = readSettingsSnapshot();
   const cachedHealth = readCacheItem(HEALTH_CACHE_KEY, CACHE_TTL_MS);
   const cachedTasks = readCacheItem(TASKS_CACHE_KEY, CACHE_TTL_MS);
 
@@ -1330,44 +1336,6 @@ function lastProgressLine(stderr) {
   return lines[lines.length - 1] || '正在扫描';
 }
 
-function applyTheme(themeName) {
-  const preset = THEME_PRESETS[themeName] || THEME_PRESETS.cinnamon;
-  const root = document.documentElement;
-  const accentRgb = hexToRgb(preset.accent);
-  const panelMix = mix('#fffaf4', preset.soft, 0.34);
-  const panelStrong = mix('#ffffff', preset.soft, 0.18);
-  root.style.setProperty('--accent', preset.accent);
-  root.style.setProperty('--accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
-  root.style.setProperty('--accent-soft', preset.soft);
-  root.style.setProperty('--panel-bg', withAlpha(panelMix, 0.88));
-  root.style.setProperty('--panel-border', withAlpha(preset.accent, 0.12));
-  root.style.setProperty('--shadow', `0 18px 60px ${withAlpha(preset.accent, 0.12)}`);
-  root.style.setProperty('--accent-faint', withAlpha(preset.accent, 0.03));
-  root.style.setProperty('--accent-soft-bg', withAlpha(preset.accent, 0.08));
-  root.style.setProperty('--accent-soft-bg-strong', withAlpha(preset.accent, 0.1));
-  root.style.setProperty('--accent-soft-bg-muted', withAlpha(preset.accent, 0.05));
-  root.style.setProperty('--accent-selected-start', withAlpha(preset.accent, 0.92));
-  root.style.setProperty('--accent-selected-end', withAlpha(mix('#000000', preset.accent, 0.76), 0.92));
-  root.style.setProperty('--accent-outline', withAlpha(preset.accent, 0.18));
-  root.style.setProperty('--accent-border-strong', withAlpha(preset.accent, 0.42));
-  root.style.setProperty('--card-glow', withAlpha(preset.accent, 0.22));
-  root.style.setProperty('--scrollbar-track', withAlpha(preset.accent, 0.08));
-  root.style.setProperty('--scrollbar-thumb-start', withAlpha(preset.accent, 0.72));
-  root.style.setProperty('--scrollbar-thumb-end', withAlpha(mix('#000000', preset.accent, 0.62), 0.72));
-  root.style.setProperty('--treemap-surface-start', withAlpha(mix('#fff7eb', preset.soft, 0.3), 0.8));
-  root.style.setProperty('--treemap-surface-mid', withAlpha(mix('#f8f0e2', preset.soft, 0.34), 0.55));
-  root.style.setProperty('--treemap-surface-end', withAlpha(panelStrong, 0.95));
-  root.style.setProperty('--switch-off-bg', withAlpha(preset.accent, 0.2));
-  root.style.setProperty('--switch-on-bg', withAlpha(preset.accent, 0.72));
-  root.style.setProperty('--mdui-color-primary', preset.accent);
-  root.style.setProperty('--mdui-color-outline-variant', withAlpha(preset.accent, 0.22));
-  root.style.setProperty('--mdui-color-surface-container', withAlpha(panelMix, 0.96));
-  root.style.setProperty('--mdui-color-surface-container-high', withAlpha(panelStrong, 0.98));
-  root.style.setProperty('--mdui-color-on-surface', '#24190c');
-  root.style.setProperty('--mdui-elevation-level1', `0 10px 30px ${withAlpha(preset.accent, 0.08)}`);
-  root.style.setProperty('--mdui-elevation-level4', `0 16px 44px ${withAlpha(preset.accent, 0.14)}`);
-}
-
 function readCacheItem(key, ttlMs = 0) {
   try {
     const raw = window.localStorage.getItem(key);
@@ -1837,7 +1805,7 @@ function hydrateDashboard({ settings, health, tasks }) {
     renderAccessiblePaths();
     renderScanOptions(settings.scanOptions || {});
     window.__fntreeSettings = settings;
-    writeCacheItem(SETTINGS_CACHE_KEY, settings);
+    writeSettingsSnapshot(settings);
   }
 
   if (health) {

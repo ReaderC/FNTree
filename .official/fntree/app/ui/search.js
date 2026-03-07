@@ -31,12 +31,15 @@
     return;
   }
 
-  const SETTINGS_CACHE_KEY = 'fntree.settings';
-  const THEME_PRESETS = {
-    cinnamon: { accent: '#8d4f22', soft: '#f2d3b4' },
-    slate: { accent: '#55606f', soft: '#d7dde5' },
-    forest: { accent: '#2f6f4f', soft: '#cde7da' },
-    ocean: { accent: '#2b6e9a', soft: '#cfe5f4' },
+  const themeRuntime = window.FNTreeTheme || {};
+  const applyTheme = (themeName, options) =>
+    themeRuntime.applyTheme ? themeRuntime.applyTheme(themeName, options) : themeName;
+  const readSettingsSnapshot = () =>
+    themeRuntime.readSettingsSnapshot ? themeRuntime.readSettingsSnapshot() : null;
+  const writeSettingsSnapshot = (settings) => {
+    if (themeRuntime.writeSettingsSnapshot) {
+      themeRuntime.writeSettingsSnapshot(settings);
+    }
   };
 
   const state = {
@@ -111,7 +114,7 @@
   });
 
   async function bootstrap() {
-    const cachedSettings = readCachedSettings();
+    const cachedSettings = readSettingsSnapshot();
     if (cachedSettings) {
       applyTheme(cachedSettings.theme || 'cinnamon');
     }
@@ -122,7 +125,7 @@
     state.searchStatus = settings.searchStatus || null;
     state.searchOptions = settings.searchOptions || state.searchOptions;
     applyTheme(state.theme);
-    writeCachedSettings(settings);
+    writeSettingsSnapshot(settings);
 
     await refreshSearchStatus();
     renderModeButtons();
@@ -422,112 +425,4 @@
     showMessage(message);
   }
 
-  function applyTheme(themeName) {
-    const preset = THEME_PRESETS[themeName] || THEME_PRESETS.cinnamon;
-    const root = document.documentElement;
-    const accentRgb = hexToRgb(preset.accent);
-    const panelMix = mix('#fffaf4', preset.soft, 0.34);
-    const panelStrong = mix('#ffffff', preset.soft, 0.18);
-    root.style.setProperty('--accent', preset.accent);
-    root.style.setProperty('--accent-rgb', `${accentRgb.r}, ${accentRgb.g}, ${accentRgb.b}`);
-    root.style.setProperty('--accent-soft', preset.soft);
-    root.style.setProperty('--panel-bg', withAlpha(panelMix, 0.88));
-    root.style.setProperty('--panel-border', withAlpha(preset.accent, 0.12));
-    root.style.setProperty('--shadow', `0 18px 60px ${withAlpha(preset.accent, 0.12)}`);
-    root.style.setProperty('--accent-faint', withAlpha(preset.accent, 0.03));
-    root.style.setProperty('--accent-soft-bg', withAlpha(preset.accent, 0.08));
-    root.style.setProperty('--accent-soft-bg-strong', withAlpha(preset.accent, 0.1));
-    root.style.setProperty('--accent-soft-bg-muted', withAlpha(preset.accent, 0.05));
-    root.style.setProperty('--accent-selected-start', withAlpha(preset.accent, 0.92));
-    root.style.setProperty('--accent-selected-end', withAlpha(mix('#000000', preset.accent, 0.76), 0.92));
-    root.style.setProperty('--accent-outline', withAlpha(preset.accent, 0.18));
-    root.style.setProperty('--accent-border-strong', withAlpha(preset.accent, 0.42));
-    root.style.setProperty('--card-glow', withAlpha(preset.accent, 0.22));
-    root.style.setProperty('--scrollbar-track', withAlpha(preset.accent, 0.08));
-    root.style.setProperty('--scrollbar-thumb-start', withAlpha(preset.accent, 0.72));
-    root.style.setProperty('--scrollbar-thumb-end', withAlpha(mix('#000000', preset.accent, 0.62), 0.72));
-    root.style.setProperty('--treemap-surface-start', withAlpha(panelStrong, 0.84));
-    root.style.setProperty('--treemap-surface-mid', withAlpha(mix('#fff4e3', preset.soft, 0.44), 0.68));
-    root.style.setProperty('--treemap-surface-end', withAlpha(panelMix, 0.96));
-    root.style.setProperty('--switch-off-bg', withAlpha(preset.accent, 0.2));
-    root.style.setProperty('--switch-on-bg', withAlpha(preset.accent, 0.72));
-    root.style.setProperty(
-      '--page-bg',
-      `linear-gradient(180deg, ${mix('#ffffff', preset.soft, 0.28)} 0%, ${mix(
-        '#f4ecdf',
-        preset.soft,
-        0.42,
-      )} 46%, ${mix('#e5dbc5', preset.soft, 0.24)} 100%)`,
-    );
-
-    if (window.mdui?.setColorScheme) {
-      window.mdui.setColorScheme(preset.accent);
-    }
-  }
-
-  function readCachedSettings() {
-    try {
-      const raw = window.localStorage.getItem(SETTINGS_CACHE_KEY);
-      if (!raw) {
-        return null;
-      }
-      const parsed = JSON.parse(raw);
-      return parsed?.value || null;
-    } catch {
-      return null;
-    }
-  }
-
-  function writeCachedSettings(settings) {
-    try {
-      window.localStorage.setItem(
-        SETTINGS_CACHE_KEY,
-        JSON.stringify({
-          updatedAt: Date.now(),
-          value: settings,
-        }),
-      );
-    } catch {
-      // Ignore cache failures.
-    }
-  }
-
-  function hexToRgb(hex) {
-    const normalized = hex.replace('#', '');
-    const expanded =
-      normalized.length === 3
-        ? normalized
-            .split('')
-            .map((char) => char + char)
-            .join('')
-        : normalized;
-
-    return {
-      r: parseInt(expanded.slice(0, 2), 16),
-      g: parseInt(expanded.slice(2, 4), 16),
-      b: parseInt(expanded.slice(4, 6), 16),
-    };
-  }
-
-  function withAlpha(color, alpha) {
-    const { r, g, b } = hexToRgb(color.startsWith('#') ? color : rgbToHex(color));
-    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-  }
-
-  function mix(colorA, colorB, weight) {
-    const a = hexToRgb(colorA);
-    const b = hexToRgb(colorB);
-    const ratio = Math.max(0, Math.min(1, weight));
-    return rgbToHex({
-      r: Math.round(a.r + (b.r - a.r) * ratio),
-      g: Math.round(a.g + (b.g - a.g) * ratio),
-      b: Math.round(a.b + (b.b - a.b) * ratio),
-    });
-  }
-
-  function rgbToHex({ r, g, b }) {
-    return `#${[r, g, b]
-      .map((value) => Math.max(0, Math.min(255, value)).toString(16).padStart(2, '0'))
-      .join('')}`;
-  }
 })();
