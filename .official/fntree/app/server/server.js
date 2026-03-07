@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 
 const fs = require('fs');
 const path = require('path');
@@ -13,19 +13,22 @@ const DATA_ROOT = process.env.TRIM_PKGVAR || path.join(APP_ROOT, '..', 'var');
 const TEMP_ROOT = process.env.TRIM_PKGTMP || path.join(APP_ROOT, '..', 'tmp');
 const SETTINGS_FILE = path.join(DATA_ROOT, 'settings.json');
 const TASKS_FILE = path.join(DATA_ROOT, 'tasks.json');
+const SEARCH_INDEX_ROOT = path.join(DATA_ROOT, 'search-index');
+const SEARCH_INDEX_META_FILE = path.join(SEARCH_INDEX_ROOT, 'meta.json');
 const PORT = Number(process.env.PORT || process.env.TRIM_SERVICE_PORT || 37125);
 const GDU_BINARY = process.env.GDU_BIN || path.join(APP_ROOT, 'bin', 'gdu');
 const GDU_MOCK_FILE = process.env.GDU_MOCK_FILE || '';
-const PLOCATE_BINARY = process.env.PLOCATE_BIN || 'plocate';
-const LOCATE_BINARY = process.env.LOCATE_BIN || 'locate';
-const FD_BINARY = process.env.FD_BIN || 'fd';
+const FD_BINARY = process.env.FD_BIN || path.join(APP_ROOT, 'bin', 'fd');
 const FDFIND_BINARY = process.env.FDFIND_BIN || 'fdfind';
+const SEARCH_INDEX_FILE = path.join(SEARCH_INDEX_ROOT, 'entries.json');
 const TASK_RETENTION_MS = 6 * 60 * 60 * 1000;
 
 const tasks = new Map();
+let searchIndexJob = null;
 
 ensureDir(DATA_ROOT);
 ensureDir(TEMP_ROOT);
+ensureDir(SEARCH_INDEX_ROOT);
 loadPersistedTasks();
 syncSettingsFromEnv();
 purgeExpiredTasks();
@@ -141,6 +144,7 @@ function defaultSettings() {
     searchOptions: {
       quickLimit: 50,
       liveLimit: 50,
+      indexIntervalHours: 24,
     },
     updatedAt: null,
   };
@@ -183,6 +187,12 @@ function normalizeSettings(settings) {
         defaults.searchOptions.liveLimit,
         10,
         200,
+      ),
+      indexIntervalHours: normalizeBoundedInteger(
+        searchOptions.indexIntervalHours,
+        defaults.searchOptions.indexIntervalHours,
+        1,
+        168,
       ),
     },
     updatedAt: settings?.updatedAt || defaults.updatedAt,
@@ -263,11 +273,12 @@ async function handleApi(req, res, url) {
 
   if (req.method === 'GET' && url.pathname === '/api/settings') {
     const settings = readSettings();
+    maybeScheduleSearchIndexRefresh(settings);
     writeJson(res, 200, {
       ...settings,
       gduBinary: GDU_BINARY,
       gduAvailable: fs.existsSync(GDU_BINARY),
-      searchStatus: getSearchStatus(),
+      searchStatus: getSearchStatus(settings),
       mockMode: Boolean(GDU_MOCK_FILE),
     });
     return;
@@ -300,14 +311,37 @@ async function handleApi(req, res, url) {
       ...saved,
       gduBinary: GDU_BINARY,
       gduAvailable: fs.existsSync(GDU_BINARY),
-      searchStatus: getSearchStatus(),
+      searchStatus: getSearchStatus(saved),
       mockMode: Boolean(GDU_MOCK_FILE),
     });
     return;
   }
 
   if (req.method === 'GET' && url.pathname === '/api/search/status') {
-    writeJson(res, 200, getSearchStatus());
+    const settings = readSettings();
+    maybeScheduleSearchIndexRefresh(settings);
+    writeJson(res, 200, getSearchStatus(settings));
+    return;
+  }
+
+  if (req.method === 'POST' && url.pathname === '/api/search/reindex') {
+    const settings = readSettings();
+    const fd = detectBinary([FD_BINARY, FDFIND_BINARY]);
+    if (!fd.available) {
+      writeJson(res, 503, {
+        error: 'search_backend_missing',
+        message: 'fd/fdfind not available.',
+        searchStatus: getSearchStatus(settings),
+      });
+      return;
+    }
+
+    const job = startSearchReindex(settings, 'manual');
+    writeJson(res, 202, {
+      ok: true,
+      startedAt: job.startedAt,
+      searchStatus: getSearchStatus(settings),
+    });
     return;
   }
 
@@ -349,6 +383,7 @@ async function handleApi(req, res, url) {
       10,
       200,
     );
+    maybeScheduleSearchIndexRefresh(settings);
 
     try {
       const result = await searchPaths({
@@ -829,9 +864,26 @@ function taskResponse(task) {
 }
 
 function getSearchStatus() {
+  const settings = arguments[0] || readSettings();
+  const meta = readSearchIndexMeta();
+  const fd = detectBinary([FD_BINARY, FDFIND_BINARY]);
   return {
-    quickBackend: detectBinary([PLOCATE_BINARY, LOCATE_BINARY]),
-    liveBackend: detectBinary([FD_BINARY, FDFIND_BINARY]),
+    quickBackend: fd,
+    quickIndexer: fd,
+    liveBackend: fd,
+    index: {
+      running: Boolean(searchIndexJob),
+      updatedAt: meta.updatedAt || null,
+      entryCount: Number(meta.entryCount || 0),
+      intervalHours: settings.searchOptions?.indexIntervalHours || 24,
+      lastError: meta.lastError || '',
+      source: meta.source || '',
+      status: searchIndexJob
+        ? 'running'
+        : meta.updatedAt
+          ? 'ready'
+          : 'missing',
+    },
   };
 }
 
@@ -865,23 +917,51 @@ function isExecutableCommand(command) {
 }
 
 async function searchPaths(options) {
-  return options.mode === 'live' ? searchWithFd(options) : searchWithLocate(options);
+  return options.mode === 'live' ? searchWithFd(options) : searchWithIndexedFd(options);
 }
 
-async function searchWithLocate(options) {
-  const backend = detectBinary([PLOCATE_BINARY, LOCATE_BINARY]);
+async function searchWithIndexedFd(options) {
+  const backend = detectBinary([FD_BINARY, FDFIND_BINARY]);
   if (!backend.available) {
-    const error = new Error('未找到 plocate/locate，当前无法执行快速搜索。');
+    const error = new Error('fd/fdfind is not available for quick search.');
     error.code = 'quick_backend_missing';
     error.statusCode = 503;
     throw error;
   }
 
-  const args = [options.query];
-  const raw = await runCommand(backend.command, args, {
-    maxOutputBytes: 4 * 1024 * 1024,
-  });
-  const candidates = splitCommandOutput(raw.stdout);
+  const indexEntries = readSearchIndexEntries();
+  if (!indexEntries.length) {
+    const indexMeta = readSearchIndexMeta();
+    let message = '快速搜索索引不存在，请先重建索引。';
+    if (searchIndexJob) {
+      message = '快速搜索索引正在构建中，请稍后再试。';
+    } else if (indexMeta.lastError) {
+      message = `快速搜索索引构建失败：${indexMeta.lastError}`;
+    }
+    const error = new Error(message);
+    error.code = 'search_index_missing';
+    error.statusCode = 409;
+    throw error;
+  }
+
+  const queryLower = options.query.toLowerCase();
+  const candidates = [];
+  for (const entry of indexEntries) {
+    const candidate = typeof entry.path === 'string' ? entry.path : '';
+    if (!candidate) {
+      continue;
+    }
+    const name = path.basename(candidate).toLowerCase();
+    const full = candidate.toLowerCase();
+    if (!full.includes(queryLower) && !name.includes(queryLower)) {
+      continue;
+    }
+    candidates.push(candidate);
+    if (candidates.length >= options.limit * 8) {
+      break;
+    }
+  }
+
   const items = await collectSearchResults(candidates, options);
   return {
     backend: backend.command,
@@ -892,7 +972,7 @@ async function searchWithLocate(options) {
 async function searchWithFd(options) {
   const backend = detectBinary([FD_BINARY, FDFIND_BINARY]);
   if (!backend.available) {
-    const error = new Error('未找到 fd/fdfind，当前无法执行实时搜索。');
+    const error = new Error('fd/fdfind is not available for live search.');
     error.code = 'live_backend_missing';
     error.statusCode = 503;
     throw error;
@@ -900,7 +980,7 @@ async function searchWithFd(options) {
 
   const searchRoot = options.basePath || options.accessiblePaths[0];
   if (!searchRoot) {
-    const error = new Error('没有可用的授权目录，无法执行实时搜索。');
+    const error = new Error('No accessible path is available for live search.');
     error.code = 'no_accessible_paths';
     error.statusCode = 403;
     throw error;
@@ -980,6 +1060,172 @@ function isPathAllowed(targetPath, accessiblePaths, basePath) {
   return accessiblePaths.some(
     (allowed) => targetPath === allowed || targetPath.startsWith(`${allowed}${path.sep}`),
   );
+}
+
+function readSearchIndexMeta() {
+  if (!fs.existsSync(SEARCH_INDEX_META_FILE)) {
+    return {
+      updatedAt: null,
+      entryCount: 0,
+      lastError: '',
+      source: '',
+    };
+  }
+
+  try {
+    const content = JSON.parse(fs.readFileSync(SEARCH_INDEX_META_FILE, 'utf8'));
+    return {
+      updatedAt: content.updatedAt || null,
+      entryCount: Number(content.entryCount || 0),
+      lastError: content.lastError || '',
+      source: content.source || '',
+    };
+  } catch (error) {
+    log(`failed to read search index meta: ${error.message}`);
+    return {
+      updatedAt: null,
+      entryCount: 0,
+      lastError: 'invalid_meta',
+      source: '',
+    };
+  }
+}
+
+function writeSearchIndexMeta(meta) {
+  const next = {
+    updatedAt: meta.updatedAt || null,
+    entryCount: Number(meta.entryCount || 0),
+    lastError: meta.lastError || '',
+    source: meta.source || '',
+  };
+  fs.writeFileSync(SEARCH_INDEX_META_FILE, JSON.stringify(next, null, 2));
+  return next;
+}
+
+function readSearchIndexEntries() {
+  if (!fs.existsSync(SEARCH_INDEX_FILE)) {
+    return [];
+  }
+
+  try {
+    const content = JSON.parse(fs.readFileSync(SEARCH_INDEX_FILE, 'utf8'));
+    return Array.isArray(content) ? content : [];
+  } catch (error) {
+    log(`failed to read search index entries: ${error.message}`);
+    return [];
+  }
+}
+
+function maybeScheduleSearchIndexRefresh(settings) {
+  if (searchIndexJob) {
+    return;
+  }
+
+  const fd = detectBinary([FD_BINARY, FDFIND_BINARY]);
+  if (!fd.available) {
+    return;
+  }
+
+  const intervalHours = settings.searchOptions?.indexIntervalHours || 24;
+  const meta = readSearchIndexMeta();
+  const lastUpdatedAt = meta.updatedAt ? Date.parse(meta.updatedAt) : 0;
+  const expired = !lastUpdatedAt || Date.now() - lastUpdatedAt >= intervalHours * 60 * 60 * 1000;
+  if (expired) {
+    startSearchReindex(settings, 'scheduled');
+  }
+}
+
+function startSearchReindex(settings, source) {
+  if (searchIndexJob) {
+    return searchIndexJob;
+  }
+
+  const job = {
+    startedAt: new Date().toISOString(),
+    source,
+  };
+  searchIndexJob = job;
+  writeSearchIndexMeta({
+    ...readSearchIndexMeta(),
+    lastError: '',
+    source,
+  });
+
+  void reindexSearchDatabases(settings, source)
+    .catch((error) => {
+      log(`search reindex failed: ${error.message}`);
+      writeSearchIndexMeta({
+        ...readSearchIndexMeta(),
+        lastError: error.message,
+        source,
+      });
+    })
+    .finally(() => {
+      searchIndexJob = null;
+    });
+
+  return job;
+}
+
+async function reindexSearchDatabases(settings, source) {
+  const accessiblePaths = Array.isArray(settings.accessiblePaths)
+    ? settings.accessiblePaths.filter((item) => typeof item === 'string' && item.trim())
+    : [];
+  if (!accessiblePaths.length) {
+    throw new Error('No accessible paths available for search indexing.');
+  }
+
+  const fd = detectBinary([FD_BINARY, FDFIND_BINARY]);
+  if (!fd.available) {
+    throw new Error('fd/fdfind is not available for search indexing.');
+  }
+
+  const entries = [];
+  const seen = new Set();
+  for (const accessiblePath of accessiblePaths) {
+    const args = [
+      '--absolute-path',
+      '--color',
+      'never',
+      '--hidden',
+      '--follow',
+      '--strip-cwd-prefix',
+      '.',
+      accessiblePath,
+    ];
+    const result = await runCommand(fd.command, args, {
+      maxOutputBytes: 64 * 1024 * 1024,
+    });
+
+    const paths = splitCommandOutput(result.stdout);
+    for (const candidate of paths) {
+      const resolved = path.resolve(candidate);
+      if (seen.has(resolved)) {
+        continue;
+      }
+
+      let stats;
+      try {
+        stats = fs.statSync(resolved);
+      } catch {
+        continue;
+      }
+
+      seen.add(resolved);
+      entries.push({
+        path: resolved,
+        type: stats.isDirectory() ? 'directory' : 'file',
+      });
+    }
+  }
+
+  fs.writeFileSync(SEARCH_INDEX_FILE, JSON.stringify(entries));
+  writeSearchIndexMeta({
+    updatedAt: new Date().toISOString(),
+    entryCount: entries.length,
+    lastError: '',
+    source,
+  });
 }
 
 function runCommand(command, args, options = {}) {

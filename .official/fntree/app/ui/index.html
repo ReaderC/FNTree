@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
@@ -9,127 +9,223 @@
     <script src="/vendor/mdui/mdui.global.js"></script>
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body>
+  <body class="mode-tree">
     <div class="shell">
       <section class="hero">
         <div>
-          <div class="eyebrow">FNOS Storage Analyzer</div>
-          <h1>FN Tree</h1>
-          <p class="hero-copy">用 treemap 查看目录和文件占用。块越大，占用越高；点击即可逐层下钻。</p>
+          <div class="eyebrow" id="heroEyebrow">FNOS Storage Analyzer</div>
+          <div class="hero-mode-switch" role="tablist" aria-label="宸ヤ綔鍖烘ā寮?>
+            <span class="hero-prefix">FN</span>
+            <button id="heroTreeTab" class="hero-mode-button is-active" type="button" data-mode="tree">Tree</button>
+            <button id="heroSearchTab" class="hero-mode-button" type="button" data-mode="search">Search</button>
+          </div>
+          <p class="hero-copy" id="heroCopy">鐢?treemap 鏌ョ湅鐩綍鍜屾枃浠跺崰鐢ㄣ€傚潡瓒婂ぇ锛屽崰鐢ㄨ秺楂橈紱鐐瑰嚮鍗冲彲閫愬眰涓嬮捇銆?/p>
         </div>
         <div class="hero-card">
-          <div class="metric-label">后端状态</div>
-          <div class="metric-value" id="healthLabel">检查中</div>
-          <div class="metric-meta" id="gduLabel">等待检测 gdu</div>
+          <div class="metric-label">鍚庣鐘舵€?/div>
+          <div class="metric-value" id="healthLabel">妫€鏌ヤ腑</div>
+          <div class="metric-meta" id="gduLabel">绛夊緟妫€娴?gdu</div>
         </div>
       </section>
 
-      <section class="panel search-panel">
-        <div class="panel-header">
-          <div>
-            <h2>开始分析</h2>
-            <p>选择已授权目录并执行扫描，再在 treemap 中查看空间分布。</p>
-          </div>
-          <div class="header-actions">
-            <a class="button button-ghost" href="/search.html">文件搜索</a>
-            <button id="importResultButton" class="button button-ghost" type="button">导入结果</button>
-            <button id="historyToggleButton" class="button button-ghost" type="button">历史记录</button>
-            <a class="button button-ghost" href="/settings.html">扫描设置</a>
-          </div>
-        </div>
-
-        <div class="search-grid">
-          <div class="field path-picker">
-            <span class="field-label">已授权目录</span>
-            <button id="accessiblePathTrigger" class="path-picker-trigger" type="button">请选择已授权目录</button>
-            <div id="accessiblePathMenu" class="path-picker-menu" hidden></div>
-          </div>
-          <mdui-text-field id="pathInput" label="分析目录" placeholder="/vol1/media"></mdui-text-field>
-          <mdui-button id="analyzeButton" full-width>开始分析</mdui-button>
-        </div>
-
-        <div class="hint-row">
-          <div>
-            <div class="subtle-title">授权目录</div>
-            <div id="accessiblePathsEmpty">正在读取</div>
-            <div id="accessiblePathsList" class="chips"></div>
-          </div>
-          <div>
-            <div class="subtle-title">默认扫描配置</div>
-            <div id="scanOptionsSummary">读取中</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel workspace-panel">
-        <div class="panel-header">
-          <div>
-            <h2>空间视图</h2>
-            <p>视觉大小以当前视图中的最大块为基准分配，其余块按相对比例展示；滚轮可逐步替换进更小的块。</p>
-          </div>
-          <div>
-            <div id="taskStatus">尚未开始</div>
-            <div id="taskProgress" class="task-progress">等待扫描任务</div>
-          </div>
-        </div>
-
-        <div class="workspace-grid">
-          <div class="card treemap-card">
-            <div class="card-top">
-              <div class="card-title">Treemap</div>
-              <div class="breadcrumb-actions">
-                <mdui-button id="zoomOutButton" variant="text">返回上级</mdui-button>
-                <mdui-button id="resetZoomButton" variant="text">回到根目录</mdui-button>
-              </div>
+      <div id="analysisStage" class="mode-stage is-active">
+        <section class="panel search-panel">
+          <div class="panel-header">
+            <div>
+              <h2>寮€濮嬪垎鏋?/h2>
+              <p>閫夋嫨宸叉巿鏉冪洰褰曞苟鎵ц鎵弿锛屽啀鍦?treemap 涓煡鐪嬬┖闂村垎甯冦€?/p>
             </div>
-            <div class="treemap-toolbar">
-              <div id="breadcrumbBar" class="breadcrumb-bar">等待结果</div>
-              <div class="treemap-side">
-                <div id="detailLevelLabel" class="detail-level-label">滚轮细化 0</div>
-                <div id="treemapFilter" class="legend" role="radiogroup" aria-label="Treemap 显示类型">
-                  <button class="legend-chip legend-all is-selected" type="button" data-filter="all">全部</button>
-                  <button class="legend-chip legend-dir" type="button" data-filter="directory">目录占用</button>
-                  <button class="legend-chip legend-file" type="button" data-filter="file">文件占用</button>
+            <div class="header-actions">
+              <button id="importResultButton" class="button button-ghost" type="button">瀵煎叆缁撴灉</button>
+              <button id="historyToggleButton" class="button button-ghost" type="button">鍘嗗彶璁板綍</button>
+              <a class="button button-ghost" href="/settings.html">鎵弿璁剧疆</a>
+            </div>
+          </div>
+
+          <div class="search-grid">
+            <div class="field path-picker">
+              <span class="field-label">宸叉巿鏉冪洰褰?/span>
+              <button id="accessiblePathTrigger" class="path-picker-trigger" type="button">璇烽€夋嫨宸叉巿鏉冪洰褰?/button>
+              <div id="accessiblePathMenu" class="path-picker-menu" hidden></div>
+            </div>
+            <mdui-text-field id="pathInput" label="鍒嗘瀽鐩綍" placeholder="/vol1/media"></mdui-text-field>
+            <mdui-button id="analyzeButton" full-width>寮€濮嬪垎鏋?/mdui-button>
+          </div>
+
+          <div class="hint-row">
+            <div>
+              <div class="subtle-title">鎺堟潈鐩綍</div>
+              <div id="accessiblePathsEmpty">姝ｅ湪璇诲彇</div>
+              <div id="accessiblePathsList" class="chips"></div>
+            </div>
+            <div>
+              <div class="subtle-title">榛樿鎵弿閰嶇疆</div>
+              <div id="scanOptionsSummary">璇诲彇涓?/div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel workspace-panel">
+          <div class="panel-header">
+            <div>
+              <h2>绌洪棿瑙嗗浘</h2>
+              <p>瑙嗚澶у皬浠ュ綋鍓嶈鍥句腑鐨勬渶澶у潡涓哄熀鍑嗗垎閰嶏紝鍏朵綑鍧楁寜鐩稿姣斾緥灞曠ず锛涙粴杞彲浠ラ€愭鏇挎崲杩涙洿灏忕殑鍧椼€?/p>
+            </div>
+            <div>
+              <div id="taskStatus">灏氭湭寮€濮?/div>
+              <div id="taskProgress" class="task-progress">绛夊緟鎵弿浠诲姟</div>
+            </div>
+          </div>
+
+          <div class="workspace-grid">
+            <div class="card treemap-card">
+              <div class="card-top">
+                <div class="card-title">Treemap</div>
+                <div class="breadcrumb-actions"></div>
+              </div>
+              <div class="treemap-toolbar">
+                <div id="breadcrumbBar" class="breadcrumb-bar">绛夊緟缁撴灉</div>
+                <div class="treemap-side">
+                  <div id="detailLevelLabel" class="detail-level-label">婊氳疆缁嗗寲 0</div>
+                  <div id="treemapFilter" class="legend" role="radiogroup" aria-label="Treemap 鏄剧ず绫诲瀷">
+                    <button class="legend-chip legend-all is-selected" type="button" data-filter="all">鍏ㄩ儴</button>
+                    <button class="legend-chip legend-dir" type="button" data-filter="directory">鐩綍鍗犵敤</button>
+                    <button class="legend-chip legend-file" type="button" data-filter="file">鏂囦欢鍗犵敤</button>
+                  </div>
                 </div>
               </div>
+              <div id="treemapView" class="treemap-empty">绛夊緟缁撴灉</div>
             </div>
-            <div id="treemapView" class="treemap-empty">等待结果</div>
+
+            <div class="card inspector-card">
+              <div class="card-title">璇︽儏</div>
+              <div id="selectionDetails" class="selection-empty">鐐瑰嚮浠绘剰鍧楁煡鐪嬭鎯?/div>
+              <div class="inspector-actions">
+                <mdui-button id="exportResultButton" variant="filled-tonal">瀵煎嚭缁撴灉</mdui-button>
+                <mdui-button id="copyPathButton" variant="filled-tonal">澶嶅埗璺緞</mdui-button>
+              </div>
+              <div class="inspector-list-header">
+                <div class="card-title sub-card-title">褰撳墠灞傜骇瀛愰」</div>
+                <div class="inspector-tip">鐐瑰嚮鐩綍鍙烦杞?/div>
+              </div>
+              <div id="childrenList" class="list-empty">绛夊緟缁撴灉</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div id="searchStage" class="mode-stage">
+        <section class="panel integrated-search-panel">
+          <div class="panel-header">
+            <div>
+              <h2>寮€濮嬫悳绱?/h2>
+              <p>蹇€熸悳绱㈣蛋鏈湴鏂囦欢绱㈠紩锛屽疄鏃舵悳绱㈣蛋 fd/fdfind銆傛悳绱㈢粨鏋滃彧浼氳惤鍦ㄥ凡鎺堟潈鐩綍鍐呫€?/p>
+            </div>
+            <div class="header-actions">
+              <button id="searchReindexButton" class="button button-ghost" type="button">閲嶅缓绱㈠紩</button>
+              <a class="button button-ghost" href="/settings.html#searchSettingsAnchor">鎼滅储璁剧疆</a>
+            </div>
           </div>
 
-          <div class="card inspector-card">
-            <div class="card-title">详情</div>
-            <div id="selectionDetails" class="selection-empty">点击任意块查看详情</div>
-            <div class="inspector-actions">
-              <mdui-button id="exportResultButton" variant="filled-tonal">导出结果</mdui-button>
-              <mdui-button id="copyPathButton" variant="filled-tonal">复制路径</mdui-button>
-            </div>
-            <div class="inspector-list-header">
-              <div class="card-title sub-card-title">当前层级子项</div>
-              <div class="inspector-tip">点击目录可跳转</div>
-            </div>
-            <div id="childrenList" class="list-empty">等待结果</div>
+          <div class="search-page-grid">
+            <section class="settings-card search-control-card">
+              <div class="search-control-head">
+                <div>
+                  <div class="settings-label">鎼滅储妯″紡</div>
+                  <div class="settings-help">蹇€熸悳绱㈤€傚悎绉掑紑鏌ヨ矾寰勶紝瀹炴椂鎼滅储閫傚悎鏌ュ垰鏂板鐨勬枃浠躲€?/div>
+                </div>
+                <div id="searchModeGroup" class="segmented-control" role="radiogroup" aria-label="鎼滅储妯″紡">
+                  <button class="segmented-option" type="button" data-mode="quick">蹇€熸悳绱?/button>
+                  <button class="segmented-option" type="button" data-mode="live">瀹炴椂鎼滅储</button>
+                </div>
+              </div>
+
+              <div class="search-form-grid">
+                <label class="field">
+                  <span class="field-label">鎼滅储鑼冨洿</span>
+                  <select id="searchBasePath" class="theme-select">
+                    <option value="">鍏ㄩ儴宸叉巿鏉冪洰褰?/option>
+                  </select>
+                </label>
+
+                <label class="field">
+                  <span class="field-label">鍏抽敭璇?/span>
+                  <input
+                    id="searchQuery"
+                    class="theme-input"
+                    type="text"
+                    placeholder="渚嬪锛歮ovie銆?mkv銆丆onan"
+                    autocomplete="off"
+                  >
+                </label>
+
+                <label class="field">
+                  <span class="field-label">缁撴灉涓婇檺</span>
+                  <input
+                    id="searchLimit"
+                    class="theme-input"
+                    type="number"
+                    min="10"
+                    max="200"
+                    step="10"
+                    value="50"
+                  >
+                </label>
+              </div>
+
+              <div class="search-action-row">
+                <mdui-button id="searchSubmitButton" variant="filled">寮€濮嬫悳绱?/mdui-button>
+                <mdui-button id="searchResetButton" variant="tonal">娓呯┖缁撴灉</mdui-button>
+                <div id="searchSummary" class="settings-status">姝ｅ湪璇诲彇鎼滅储鑳藉姏</div>
+              </div>
+            </section>
+
           </div>
-        </div>
-      </section>
+        </section>
+
+        <section class="panel integrated-search-results-panel">
+          <div class="search-results-grid">
+            <section class="settings-card search-results-card">
+              <div class="search-results-header">
+                <div>
+                  <div class="card-title">缁撴灉鍒楄〃</div>
+                  <div id="searchResultMeta" class="settings-help">杈撳叆鍏抽敭璇嶅悗寮€濮嬫悳绱?/div>
+                </div>
+              </div>
+              <div id="searchResultList" class="search-result-list list-empty">杩樻病鏈夋悳绱㈢粨鏋?/div>
+            </section>
+
+            <section class="settings-card search-detail-card">
+              <div class="card-title">缁撴灉璇︽儏</div>
+              <div id="searchSelection" class="selection-empty">鐐瑰嚮宸︿晶缁撴灉鏌ョ湅璇︽儏</div>
+              <div class="inspector-actions search-detail-actions">
+                <mdui-button id="searchCopyPathButton" variant="filled-tonal">澶嶅埗璺緞</mdui-button>
+              </div>
+            </section>
+          </div>
+        </section>
+      </div>
     </div>
 
     <div id="historyBackdrop" class="history-backdrop" hidden></div>
     <aside id="historyDrawer" class="history-drawer" aria-hidden="true">
       <div class="history-drawer-header">
         <div>
-          <div class="card-title">历史记录</div>
-          <div class="history-drawer-copy">保留最近 20 次分析任务，方便回看结果和重新分析。</div>
+          <div class="card-title">鍘嗗彶璁板綍</div>
+          <div class="history-drawer-copy">淇濈暀鏈€杩?20 娆″垎鏋愪换鍔★紝鏂逛究鍥炵湅缁撴灉鍜岄噸鏂板垎鏋愩€?/div>
         </div>
         <div class="history-drawer-actions">
-          <mdui-button id="clearTasksButton" variant="text">清空记录</mdui-button>
-          <button id="historyCloseButton" class="button button-ghost" type="button">关闭</button>
+          <mdui-button id="clearTasksButton" variant="text">娓呯┖璁板綍</mdui-button>
+          <button id="historyCloseButton" class="button button-ghost" type="button">鍏抽棴</button>
         </div>
       </div>
-      <div id="recentTasks" class="recent-empty">还没有分析记录</div>
+      <div id="recentTasks" class="recent-empty">杩樻病鏈夊垎鏋愯褰?/div>
     </aside>
 
     <input id="importResultInput" type="file" accept=".json,.fntree.json,application/json" hidden>
 
     <script src="/app.js"></script>
+    <script src="/search.js"></script>
   </body>
 </html>
+

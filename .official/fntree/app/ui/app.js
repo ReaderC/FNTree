@@ -3,6 +3,7 @@ const state = {
   pollTimer: null,
   localTaskStartedAt: null,
   accessiblePaths: [],
+  searchStatus: null,
   rootNode: null,
   zoomPath: [],
   selectedPath: null,
@@ -47,17 +48,30 @@ const historyDrawer = document.getElementById('historyDrawer');
 const historyBackdrop = document.getElementById('historyBackdrop');
 const healthLabel = document.getElementById('healthLabel');
 const gduLabel = document.getElementById('gduLabel');
+const heroEyebrow = document.getElementById('heroEyebrow');
+const heroCopy = document.getElementById('heroCopy');
+const heroTreeTab = document.getElementById('heroTreeTab');
+const heroSearchTab = document.getElementById('heroSearchTab');
+const analysisStage = document.getElementById('analysisStage');
+const searchStage = document.getElementById('searchStage');
 const detailLevelLabel = document.getElementById('detailLevelLabel');
-const zoomOutButton = document.getElementById('zoomOutButton');
-const resetZoomButton = document.getElementById('resetZoomButton');
 const copyPathButton = document.getElementById('copyPathButton');
 const exportResultButton = document.getElementById('exportResultButton');
-const openInFilesButton = { addEventListener() {} };
 const clearTasksButton = document.getElementById('clearTasksButton');
 const treemapFilter = document.getElementById('treemapFilter');
 const importResultInput = document.getElementById('importResultInput');
 const TREEMAP_MAX_VISIBLE = 24;
 let treemapTooltip = null;
+const VIEW_COPY = {
+  tree: {
+    eyebrow: 'FNOS Storage Analyzer',
+    copy: '用 treemap 查看目录和文件占用。块越大，占用越高；点击即可逐层下钻。',
+  },
+  search: {
+    eyebrow: 'FNOS File Search',
+    copy: '快速搜索走索引，实时搜索走当前文件系统。搜索和分析共用同一套授权目录。',
+  },
+};
 
 bootstrap().catch((error) => {
   showError(error.message || '初始化失败');
@@ -91,22 +105,7 @@ document.addEventListener('click', (event) => {
   }
 });
 
-zoomOutButton.addEventListener('click', () => {
-  if (!state.zoomPath.length) {
-    return;
-  }
-  state.zoomPath = state.zoomPath.slice(0, -1);
-  state.selectedPath = getCurrentNode()?.path || state.selectedPath;
-  state.detailLevel = 0;
-  renderWorkspace();
-});
 
-resetZoomButton.addEventListener('click', () => {
-  state.zoomPath = [];
-  state.selectedPath = state.rootNode?.path || null;
-  state.detailLevel = 0;
-  renderWorkspace();
-});
 
 copyPathButton.addEventListener('click', async () => {
   const node = getSelectedNode();
@@ -123,15 +122,6 @@ copyPathButton.addEventListener('click', async () => {
   }
 });
 
-openInFilesButton.addEventListener('click', () => {
-  const node = getSelectedNode();
-  if (!node?.path) {
-    showError('当前没有可打开的路径');
-    return;
-  }
-
-  showError('暂未接入 FNOS 文件管理器打开接口。当前先保留路径复制能力。');
-});
 
 clearTasksButton.addEventListener('click', () => {
   clearTasks().catch((error) => {
@@ -183,7 +173,16 @@ document.addEventListener('keydown', (event) => {
   }
 });
 
+heroTreeTab?.addEventListener('click', () => {
+  setAppMode('tree');
+});
+
+heroSearchTab?.addEventListener('click', () => {
+  setAppMode('search');
+});
+
 window.addEventListener('resize', throttle(renderTreemapOnly, 120));
+window.addEventListener('hashchange', syncModeFromLocation);
 treemapView.addEventListener(
   'wheel',
   (event) => {
@@ -210,23 +209,65 @@ treemapView.addEventListener(
 );
 
 async function bootstrap() {
-  const [health, settings, tasks] = await Promise.all([
+  const cachedSettings = readCacheItem(SETTINGS_CACHE_KEY);
+  const cachedHealth = readCacheItem(HEALTH_CACHE_KEY, CACHE_TTL_MS);
+  const cachedTasks = readCacheItem(TASKS_CACHE_KEY, CACHE_TTL_MS);
+
+  if (cachedSettings || cachedHealth || cachedTasks) {
+    hydrateDashboard({
+      settings: cachedSettings,
+      health: cachedHealth,
+      tasks: cachedTasks,
+    });
+  } else {
+    clearWorkspace();
+  }
+
+  const [healthResult, settingsResult, tasksResult] = await Promise.allSettled([
     fetchJson('/api/health'),
     fetchJson('/api/settings'),
     fetchJson('/api/tasks'),
   ]);
 
-  healthLabel.textContent = health.ok ? '服务正常' : '服务异常';
-  gduLabel.textContent = health.gduAvailable
-    ? `gdu 已就绪: ${settings.gduBinary}`
-    : `缺少 gdu: ${settings.gduBinary}`;
+  const health = healthResult.status === 'fulfilled' ? healthResult.value : cachedHealth;
+  const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : cachedSettings;
+  const tasks = tasksResult.status === 'fulfilled' ? tasksResult.value : cachedTasks;
 
-  state.accessiblePaths = settings.accessiblePaths || [];
-  renderAccessiblePaths();
-  renderScanOptions(settings.scanOptions || {});
-  renderTreemapFilter();
-  renderRecentTasks(tasks.items || []);
-  clearWorkspace();
+  if (!settings) {
+    throw new Error('璇诲彇璁剧疆澶辫触');
+  }
+
+  hydrateDashboard({ settings, health, tasks });
+}
+
+function syncModeFromLocation() {
+  const nextMode = window.location.hash === '#search' ? 'search' : 'tree';
+  setAppMode(nextMode, { updateHash: false });
+}
+
+function setAppMode(mode, options = {}) {
+  const nextMode = mode === 'search' ? 'search' : 'tree';
+  document.body.classList.toggle('mode-search', nextMode === 'search');
+  document.body.classList.toggle('mode-tree', nextMode === 'tree');
+  analysisStage?.classList.toggle('is-active', nextMode === 'tree');
+  searchStage?.classList.toggle('is-active', nextMode === 'search');
+  heroTreeTab?.classList.toggle('is-active', nextMode === 'tree');
+  heroSearchTab?.classList.toggle('is-active', nextMode === 'search');
+
+  if (heroEyebrow) {
+    heroEyebrow.textContent = VIEW_COPY[nextMode].eyebrow;
+  }
+  if (heroCopy) {
+    heroCopy.textContent = VIEW_COPY[nextMode].copy;
+  }
+  renderServiceCard(nextMode);
+
+  if (options.updateHash !== false) {
+    const nextHash = nextMode === 'search' ? '#search' : '#tree';
+    if (window.location.hash !== nextHash) {
+      window.location.hash = nextHash;
+    }
+  }
 }
 
 function renderAccessiblePaths() {
@@ -686,17 +727,6 @@ function focusNode(targetPath) {
   renderWorkspace();
 }
 
-function renderScanOptions(scanOptions) {
-  const labels = [];
-  labels.push(scanOptions.scanMode === 'apparent-size' ? '表观大小' : '磁盘占用');
-  labels.push(scanOptions.ignoreHidden ? '忽略隐藏目录' : '包含隐藏目录');
-  labels.push(scanOptions.noCross ? '不跨文件系统' : '允许跨文件系统');
-  labels.push(scanOptions.followSymlinks ? '跟随符号链接' : '不跟随符号链接');
-  labels.push(scanOptions.sequential ? '顺序扫描' : '并发扫描');
-  labels.push(`前 ${scanOptions.topLimit || 30} 项`);
-  scanOptionsSummary.textContent = labels.join(' / ');
-}
-
 async function clearTasks() {
   await fetchJson('/api/tasks', { method: 'DELETE' });
   await refreshRecentTasks();
@@ -706,72 +736,6 @@ async function clearTasks() {
 async function refreshRecentTasks() {
   const tasks = await fetchJson('/api/tasks');
   renderRecentTasks(tasks.items || []);
-}
-
-function renderRecentTasks(items) {
-  if (!items.length) {
-    recentTasks.innerHTML = '<div class="recent-empty">还没有分析记录</div>';
-    return;
-  }
-
-  recentTasks.innerHTML = items
-    .map(
-      (item) => `
-        <div class="recent-row">
-          <div class="recent-main">
-            <div class="recent-path">${escapeHtml(item.path)}</div>
-            <div class="status-badge">${statusText(item.status)}</div>
-          </div>
-          <div class="recent-meta">
-            ${escapeHtml(formatDate(item.createdAt))}
-            ${item.error ? ` / ${escapeHtml(item.error)}` : ''}
-          </div>
-          <div class="recent-actions">
-            <button class="action-link" type="button" data-path="${escapeAttribute(item.path)}">重新分析</button>
-            <button class="action-link" type="button" data-task-id="${escapeAttribute(item.id)}">查看结果</button>
-            <button class="action-link action-link-danger" type="button" data-delete-id="${escapeAttribute(item.id)}">删除记录</button>
-          </div>
-        </div>
-      `,
-    )
-    .join('');
-
-  recentTasks.querySelectorAll('[data-path]').forEach((button) => {
-    button.addEventListener('click', () => {
-      pathInput.value = button.dataset.path || '';
-      startAnalyze().catch((error) => {
-        showError(error.message || '分析启动失败');
-      });
-    });
-  });
-
-  recentTasks.querySelectorAll('[data-task-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      try {
-        const task = await fetchJson(`/api/analyze/${button.dataset.taskId}`);
-        state.taskId = task.id;
-        renderTask(task);
-      } catch (error) {
-        showError(error.message || '读取任务失败');
-      }
-    });
-  });
-
-  recentTasks.querySelectorAll('[data-delete-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      try {
-        await fetchJson(`/api/analyze/${button.dataset.deleteId}`, { method: 'DELETE' });
-        if (state.taskId === button.dataset.deleteId) {
-          clearWorkspace();
-          state.taskId = null;
-        }
-        await refreshRecentTasks();
-        showMessage('任务记录已删除');
-      } catch (error) {
-        showError(error.message || '删除记录失败');
-      }
-    });
-  });
 }
 
 function getCurrentNode() {
@@ -1144,94 +1108,6 @@ function statusText(status) {
   }
 }
 
-function renderRecentTasks(items) {
-  if (!items.length) {
-    recentTasks.innerHTML = '<div class="recent-empty">还没有分析记录</div>';
-    return;
-  }
-
-  recentTasks.innerHTML = items
-    .map(
-      (item) => `
-        <div class="recent-row">
-          <div class="recent-header">
-            <div class="recent-path">${escapeHtml(item.path)}</div>
-            <div class="status-badge">${statusText(item.status)}</div>
-          </div>
-          <div class="recent-main">
-            <div class="recent-meta">
-              <span class="recent-meta-chip">${escapeHtml(formatDate(item.createdAt))}</span>
-              ${
-                item.error
-                  ? `<span class="recent-meta-chip recent-meta-chip-danger">${escapeHtml(item.error)}</span>`
-                  : ''
-              }
-            </div>
-            <div class="recent-actions">
-              <button class="action-link" type="button" data-path="${escapeAttribute(item.path)}">重新分析</button>
-              <button class="action-link" type="button" data-task-id="${escapeAttribute(item.id)}">查看结果</button>
-              <button class="action-link action-link-danger" type="button" data-delete-id="${escapeAttribute(item.id)}">删除记录</button>
-            </div>
-          </div>
-        </div>
-      `,
-    )
-    .join('');
-
-  recentTasks.querySelectorAll('[data-path]').forEach((button) => {
-    button.addEventListener('click', () => {
-      pathInput.value = button.dataset.path || '';
-      startAnalyze().catch((error) => {
-        showError(error.message || '分析启动失败');
-      });
-    });
-  });
-
-  recentTasks.querySelectorAll('[data-task-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      try {
-        const task = await fetchJson(`/api/analyze/${button.dataset.taskId}`);
-        state.taskId = task.id;
-        renderTask(task);
-        setHistoryOpen(false);
-      } catch (error) {
-        showError(error.message || '读取任务失败');
-      }
-    });
-  });
-
-  recentTasks.querySelectorAll('[data-delete-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      try {
-        await fetchJson(`/api/analyze/${button.dataset.deleteId}`, { method: 'DELETE' });
-        if (state.taskId === button.dataset.deleteId) {
-          clearWorkspace();
-          state.taskId = null;
-        }
-        await refreshRecentTasks();
-        showMessage('任务记录已删除');
-      } catch (error) {
-        showError(error.message || '删除记录失败');
-      }
-    });
-  });
-}
-
-function formatDate(value) {
-  if (!value) {
-    return '-';
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
-    date.getDate(),
-  ).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(
-    date.getMinutes(),
-  ).padStart(2, '0')}:${String(date.getSeconds()).padStart(2, '0')}`;
-}
-
 function throttle(fn, wait) {
   let timeoutId = null;
   return () => {
@@ -1454,217 +1330,6 @@ function lastProgressLine(stderr) {
   return lines[lines.length - 1] || '正在扫描';
 }
 
-function renderRecentTasks(items) {
-  if (!items.length) {
-    recentTasks.innerHTML = '<div class="recent-empty">还没有分析记录</div>';
-    return;
-  }
-
-  recentTasks.innerHTML = items
-    .map(
-      (item) => `
-        <div class="recent-row">
-          <div class="recent-header">
-            <div class="recent-path">${escapeHtml(item.path)}</div>
-            <div class="status-badge">${statusText(item.status)}</div>
-          </div>
-          <div class="recent-main">
-            <div class="recent-meta">
-              <span class="recent-meta-chip">${escapeHtml(formatDate(item.createdAt))}</span>
-              ${
-                item.error
-                  ? `<span class="recent-meta-chip recent-meta-chip-danger">${escapeHtml(item.error)}</span>`
-                  : ''
-              }
-            </div>
-            <div class="recent-actions">
-              <button class="action-link" type="button" data-path="${escapeAttribute(item.path)}">重新分析</button>
-              <button class="action-link" type="button" data-task-id="${escapeAttribute(item.id)}">查看结果</button>
-              <button class="action-link action-link-danger" type="button" data-delete-id="${escapeAttribute(item.id)}">删除记录</button>
-            </div>
-          </div>
-        </div>
-      `,
-    )
-    .join('');
-
-  recentTasks.querySelectorAll('[data-path]').forEach((button) => {
-    button.addEventListener('click', () => {
-      pathInput.value = button.dataset.path || '';
-      startAnalyze().catch((error) => {
-        showError(error.message || '分析启动失败');
-      });
-    });
-  });
-
-  recentTasks.querySelectorAll('[data-task-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      try {
-        const task = await fetchJson(`/api/analyze/${button.dataset.taskId}`);
-        state.taskId = task.id;
-        renderTask(task);
-        setHistoryOpen(false);
-      } catch (error) {
-        showError(error.message || '读取任务失败');
-      }
-    });
-  });
-
-  recentTasks.querySelectorAll('[data-delete-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      try {
-        await fetchJson(`/api/analyze/${button.dataset.deleteId}`, { method: 'DELETE' });
-        if (state.taskId === button.dataset.deleteId) {
-          clearWorkspace();
-          state.taskId = null;
-        }
-        await refreshRecentTasks();
-        showMessage('任务记录已删除');
-      } catch (error) {
-        showError(error.message || '删除记录失败');
-      }
-    });
-  });
-}
-function renderRecentTasks(items) {
-  if (!items.length) {
-    recentTasks.innerHTML = '<div class="recent-empty">还没有分析记录</div>';
-    writeCacheItem(TASKS_CACHE_KEY, { items: [] });
-    return;
-  }
-
-  recentTasks.innerHTML = items
-    .map(
-      (item) => `
-        <div class="recent-row">
-          <div class="recent-header">
-            <div class="recent-path">${escapeHtml(item.path)}</div>
-            <div class="status-badge">${statusText(item.status)}</div>
-          </div>
-          <div class="recent-main">
-            <div class="recent-meta">
-              <span class="recent-meta-chip">${escapeHtml(formatDate(item.createdAt))}</span>
-              ${
-                item.error
-                  ? `<span class="recent-meta-chip recent-meta-chip-danger">${escapeHtml(item.error)}</span>`
-                  : ''
-              }
-            </div>
-            <div class="recent-actions">
-              <button class="action-link" type="button" data-path="${escapeAttribute(item.path)}">重新分析</button>
-              <button class="action-link" type="button" data-task-id="${escapeAttribute(item.id)}">查看结果</button>
-              <button class="action-link action-link-danger" type="button" data-delete-id="${escapeAttribute(item.id)}">删除记录</button>
-            </div>
-          </div>
-        </div>
-      `,
-    )
-    .join('');
-
-  recentTasks.querySelectorAll('[data-path]').forEach((button) => {
-    button.addEventListener('click', () => {
-      pathInput.value = button.dataset.path || '';
-      startAnalyze().catch((error) => {
-        showError(error.message || '分析启动失败');
-      });
-    });
-  });
-
-  recentTasks.querySelectorAll('[data-task-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      try {
-        const task = await fetchJson(`/api/analyze/${button.dataset.taskId}`);
-        state.taskId = task.id;
-        renderTask(task);
-        setHistoryOpen(false);
-      } catch (error) {
-        showError(error.message || '读取任务失败');
-      }
-    });
-  });
-
-  recentTasks.querySelectorAll('[data-delete-id]').forEach((button) => {
-    button.addEventListener('click', async () => {
-      try {
-        await fetchJson(`/api/analyze/${button.dataset.deleteId}`, { method: 'DELETE' });
-        if (state.taskId === button.dataset.deleteId) {
-          clearWorkspace();
-          state.taskId = null;
-        }
-        await refreshRecentTasks();
-        showMessage('任务记录已删除');
-      } catch (error) {
-        showError(error.message || '删除记录失败');
-      }
-    });
-  });
-
-  writeCacheItem(TASKS_CACHE_KEY, { items });
-}
-
-async function bootstrap() {
-  const cachedSettings = readCacheItem(SETTINGS_CACHE_KEY);
-  const cachedHealth = readCacheItem(HEALTH_CACHE_KEY, CACHE_TTL_MS);
-  const cachedTasks = readCacheItem(TASKS_CACHE_KEY, CACHE_TTL_MS);
-
-  if (cachedSettings || cachedHealth || cachedTasks) {
-    hydrateDashboard({
-      settings: cachedSettings,
-      health: cachedHealth,
-      tasks: cachedTasks,
-    });
-  } else {
-    clearWorkspace();
-  }
-
-  const [healthResult, settingsResult, tasksResult] = await Promise.allSettled([
-    fetchJson('/api/health'),
-    fetchJson('/api/settings'),
-    fetchJson('/api/tasks'),
-  ]);
-
-  const health = healthResult.status === 'fulfilled' ? healthResult.value : cachedHealth;
-  const settings = settingsResult.status === 'fulfilled' ? settingsResult.value : cachedSettings;
-  const tasks = tasksResult.status === 'fulfilled' ? tasksResult.value : cachedTasks;
-
-  if (!settings) {
-    throw new Error('读取设置失败');
-  }
-
-  hydrateDashboard({ settings, health, tasks });
-}
-
-function hydrateDashboard({ settings, health, tasks }) {
-  if (settings) {
-    state.accessiblePaths = settings.accessiblePaths || [];
-    state.treemapMaxVisible = Number(settings.scanOptions?.treemapMaxVisible || 24);
-    applyTheme(settings.theme || 'cinnamon');
-    renderAccessiblePaths();
-    renderScanOptions(settings.scanOptions || {});
-    writeCacheItem(SETTINGS_CACHE_KEY, settings);
-  }
-
-  if (health) {
-    healthLabel.textContent = health.ok ? '服务正常' : '服务异常';
-    if (settings?.gduBinary) {
-      gduLabel.textContent = health.gduAvailable
-        ? `gdu 已就绪 · ${settings.gduBinary}`
-        : `缺少 gdu · ${settings.gduBinary}`;
-    }
-    writeCacheItem(HEALTH_CACHE_KEY, health);
-  }
-
-  renderTreemapFilter();
-
-  if (Array.isArray(tasks?.items)) {
-    renderRecentTasks(tasks.items);
-  }
-
-  if (!state.rootNode) {
-    clearWorkspace();
-  }
-}
-
 function applyTheme(themeName) {
   const preset = THEME_PRESETS[themeName] || THEME_PRESETS.cinnamon;
   const root = document.documentElement;
@@ -1689,23 +1354,18 @@ function applyTheme(themeName) {
   root.style.setProperty('--scrollbar-track', withAlpha(preset.accent, 0.08));
   root.style.setProperty('--scrollbar-thumb-start', withAlpha(preset.accent, 0.72));
   root.style.setProperty('--scrollbar-thumb-end', withAlpha(mix('#000000', preset.accent, 0.62), 0.72));
-  root.style.setProperty('--treemap-surface-start', withAlpha(panelStrong, 0.84));
-  root.style.setProperty('--treemap-surface-mid', withAlpha(mix('#fff4e3', preset.soft, 0.44), 0.68));
-  root.style.setProperty('--treemap-surface-end', withAlpha(panelMix, 0.96));
+  root.style.setProperty('--treemap-surface-start', withAlpha(mix('#fff7eb', preset.soft, 0.3), 0.8));
+  root.style.setProperty('--treemap-surface-mid', withAlpha(mix('#f8f0e2', preset.soft, 0.34), 0.55));
+  root.style.setProperty('--treemap-surface-end', withAlpha(panelStrong, 0.95));
   root.style.setProperty('--switch-off-bg', withAlpha(preset.accent, 0.2));
   root.style.setProperty('--switch-on-bg', withAlpha(preset.accent, 0.72));
-  root.style.setProperty(
-    '--page-bg',
-    `linear-gradient(180deg, ${mix('#ffffff', preset.soft, 0.28)} 0%, ${mix(
-      '#f4ecdf',
-      preset.soft,
-      0.42,
-    )} 46%, ${mix('#e5dbc5', preset.soft, 0.24)} 100%)`,
-  );
-
-  if (window.mdui?.setColorScheme) {
-    window.mdui.setColorScheme(preset.accent);
-  }
+  root.style.setProperty('--mdui-color-primary', preset.accent);
+  root.style.setProperty('--mdui-color-outline-variant', withAlpha(preset.accent, 0.22));
+  root.style.setProperty('--mdui-color-surface-container', withAlpha(panelMix, 0.96));
+  root.style.setProperty('--mdui-color-surface-container-high', withAlpha(panelStrong, 0.98));
+  root.style.setProperty('--mdui-color-on-surface', '#24190c');
+  root.style.setProperty('--mdui-elevation-level1', `0 10px 30px ${withAlpha(preset.accent, 0.08)}`);
+  root.style.setProperty('--mdui-elevation-level4', `0 16px 44px ${withAlpha(preset.accent, 0.14)}`);
 }
 
 function readCacheItem(key, ttlMs = 0) {
@@ -2126,3 +1786,80 @@ breadcrumbBar.addEventListener(
   },
   { passive: false },
 );
+
+function shortCommandName(command) {
+  if (!command) {
+    return '未就绪';
+  }
+  const parts = String(command).split('/');
+  return parts[parts.length - 1] || String(command);
+}
+
+function renderServiceCard(mode) {
+  if (!healthLabel || !gduLabel) {
+    return;
+  }
+
+  if (mode === 'search') {
+    const quick = state.searchStatus?.quickBackend;
+    const live = state.searchStatus?.liveBackend;
+    const index = state.searchStatus?.index;
+    const quickText = quick?.available ? shortCommandName(quick.command) : '未就绪';
+    const liveText = live?.available ? shortCommandName(live.command) : '未就绪';
+    const indexText = index?.running
+      ? '索引构建中'
+      : index?.updatedAt
+        ? '索引已就绪'
+        : index?.lastError
+          ? '索引失败'
+          : '索引缺失';
+    const available = Boolean(quick?.available || live?.available);
+
+    healthLabel.textContent = available ? '搜索可用' : '搜索受限';
+    gduLabel.textContent = `快速：${quickText} / 实时：${liveText} / ${indexText}`;
+    return;
+  }
+
+  const health = window.__fntreeHealth || {};
+  const settings = window.__fntreeSettings || {};
+  healthLabel.textContent = health.ok ? '服务正常' : '服务异常';
+  gduLabel.textContent = health.gduAvailable
+    ? `gdu 已就绪 · ${settings.gduBinary || ''}`
+    : `缺少 gdu · ${settings.gduBinary || ''}`;
+}
+
+function hydrateDashboard({ settings, health, tasks }) {
+  if (settings) {
+    state.accessiblePaths = settings.accessiblePaths || [];
+    state.searchStatus = settings.searchStatus || state.searchStatus;
+    state.treemapMaxVisible = Number(settings.scanOptions?.treemapMaxVisible || 24);
+    applyTheme(settings.theme || 'cinnamon');
+    renderAccessiblePaths();
+    renderScanOptions(settings.scanOptions || {});
+    window.__fntreeSettings = settings;
+    writeCacheItem(SETTINGS_CACHE_KEY, settings);
+  }
+
+  if (health) {
+    window.__fntreeHealth = health;
+    writeCacheItem(HEALTH_CACHE_KEY, health);
+  }
+
+  const mode = document.body.classList.contains('mode-search') ? 'search' : 'tree';
+  renderServiceCard(mode);
+  renderTreemapFilter();
+
+  if (Array.isArray(tasks?.items)) {
+    renderRecentTasks(tasks.items);
+  }
+
+  if (!state.rootNode) {
+    clearWorkspace();
+  }
+}
+
+window.__fntreeSearchStatusUpdate = (status) => {
+  state.searchStatus = status || null;
+  const mode = document.body.classList.contains('mode-search') ? 'search' : 'tree';
+  renderServiceCard(mode);
+};

@@ -25,7 +25,7 @@
         </div>
 
         <div class="settings-page-grid">
-          <label class="settings-card settings-card-stack">
+          <label id="searchSettingsAnchor" class="settings-card settings-card-stack">
             <span class="settings-label">主题色</span>
             <span class="settings-help">统一按钮、输入框、强调色和 mdui 组件的主色调。</span>
             <div id="settingTheme" class="segmented-control" role="radiogroup" aria-label="主题色">
@@ -101,6 +101,31 @@
                 +1
               </button>
             </div>
+          </label>
+
+          <label class="settings-card settings-card-stack">
+            <span class="settings-label">搜索索引周期（小时）</span>
+            <span class="settings-help">控制本地文件索引自动重建的周期，范围 1 到 168 小时。</span>
+            <div class="stepper" aria-label="搜索索引周期（小时）">
+              <button id="searchIndexIntervalDecrease" class="stepper-button" type="button" aria-label="减少 1">
+                -1
+              </button>
+              <input
+                id="settingSearchIndexInterval"
+                class="stepper-input"
+                type="number"
+                min="1"
+                max="168"
+                step="1"
+                inputmode="numeric"
+                value="24"
+                aria-label="搜索索引周期（小时）"
+              >
+              <button id="searchIndexIntervalIncrease" class="stepper-button" type="button" aria-label="增加 1">
+                +1
+              </button>
+            </div>
+            <span id="searchIndexUpdatedAt" class="settings-help">尚未建立索引</span>
           </label>
 
           <label class="settings-card settings-card-toggle">

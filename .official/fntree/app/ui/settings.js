@@ -18,6 +18,10 @@ const topLimitIncrease = document.getElementById('topLimitIncrease');
 const settingTreemapVisible = document.getElementById('settingTreemapVisible');
 const treemapVisibleDecrease = document.getElementById('treemapVisibleDecrease');
 const treemapVisibleIncrease = document.getElementById('treemapVisibleIncrease');
+const settingSearchIndexInterval = document.getElementById('settingSearchIndexInterval');
+const searchIndexIntervalDecrease = document.getElementById('searchIndexIntervalDecrease');
+const searchIndexIntervalIncrease = document.getElementById('searchIndexIntervalIncrease');
+const searchIndexUpdatedAt = document.getElementById('searchIndexUpdatedAt');
 const saveSettingsButton = document.getElementById('saveSettingsButton');
 const settingsStatus = document.getElementById('settingsStatus');
 
@@ -26,6 +30,7 @@ const settingsState = {
   scanMode: 'disk-usage',
   topLimit: 30,
   treemapMaxVisible: 24,
+  searchIndexIntervalHours: 24,
 };
 
 bootstrap().catch((error) => {
@@ -86,6 +91,25 @@ settingTreemapVisible.addEventListener('input', () => {
   );
 });
 
+searchIndexIntervalDecrease.addEventListener('click', () => {
+  settingsState.searchIndexIntervalHours = Math.max(1, settingsState.searchIndexIntervalHours - 1);
+  renderSearchIndexInterval();
+});
+
+searchIndexIntervalIncrease.addEventListener('click', () => {
+  settingsState.searchIndexIntervalHours = Math.min(168, settingsState.searchIndexIntervalHours + 1);
+  renderSearchIndexInterval();
+});
+
+settingSearchIndexInterval.addEventListener('input', () => {
+  settingsState.searchIndexIntervalHours = clampNumber(
+    settingSearchIndexInterval.value,
+    1,
+    168,
+    settingsState.searchIndexIntervalHours,
+  );
+});
+
 async function bootstrap() {
   const cachedSettings = readCachedSettings();
   if (cachedSettings) {
@@ -95,6 +119,7 @@ async function bootstrap() {
 
   const settings = await fetchJson('/api/settings');
   hydrateSettings(settings);
+  await hydrateSearchIndexStatus();
   settingsStatus.textContent = '已加载当前默认设置';
 }
 
@@ -104,6 +129,7 @@ function hydrateSettings(settings) {
   settingsState.scanMode = scanOptions.scanMode || 'disk-usage';
   settingsState.topLimit = Number(scanOptions.topLimit || 30);
   settingsState.treemapMaxVisible = Number(scanOptions.treemapMaxVisible || 24);
+  settingsState.searchIndexIntervalHours = Number(settings.searchOptions?.indexIntervalHours || 24);
   settingIgnoreHidden.checked = Boolean(scanOptions.ignoreHidden);
   settingNoCross.checked = Boolean(scanOptions.noCross);
   settingFollowSymlinks.checked = Boolean(scanOptions.followSymlinks);
@@ -113,8 +139,35 @@ function hydrateSettings(settings) {
   renderScanModeButtons();
   renderTopLimit();
   renderTreemapVisible();
+  renderSearchIndexInterval();
   applyTheme(settingsState.theme);
   writeCachedSettings(settings);
+}
+
+async function hydrateSearchIndexStatus() {
+  if (!searchIndexUpdatedAt) {
+    return;
+  }
+
+  try {
+    const status = await fetchJson('/api/search/status');
+    const index = status?.index;
+    if (index?.running) {
+      searchIndexUpdatedAt.textContent = '索引构建中';
+      return;
+    }
+    if (index?.lastError) {
+      searchIndexUpdatedAt.textContent = `最近失败：${index.lastError}`;
+      return;
+    }
+    if (index?.updatedAt) {
+      searchIndexUpdatedAt.textContent = `上次重建：${formatTime(index.updatedAt)}`;
+      return;
+    }
+    searchIndexUpdatedAt.textContent = '尚未建立索引';
+  } catch (_) {
+    searchIndexUpdatedAt.textContent = '索引状态读取失败';
+  }
 }
 
 function renderThemeButtons() {
@@ -141,6 +194,10 @@ function renderTreemapVisible() {
   settingTreemapVisible.value = String(settingsState.treemapMaxVisible);
 }
 
+function renderSearchIndexInterval() {
+  settingSearchIndexInterval.value = String(settingsState.searchIndexIntervalHours);
+}
+
 async function saveSettings() {
   const topLimit = Number(settingsState.topLimit || 0);
   if (!Number.isInteger(topLimit) || topLimit <= 0) {
@@ -149,6 +206,11 @@ async function saveSettings() {
   const treemapMaxVisible = Number(settingsState.treemapMaxVisible || 0);
   if (!Number.isInteger(treemapMaxVisible) || treemapMaxVisible < 5 || treemapMaxVisible > 30) {
     throw new Error('Treemap 最大显示块数必须在 5 到 30 之间');
+  }
+
+  const searchIndexIntervalHours = Number(settingsState.searchIndexIntervalHours || 0);
+  if (!Number.isInteger(searchIndexIntervalHours) || searchIndexIntervalHours < 1 || searchIndexIntervalHours > 168) {
+    throw new Error('搜索索引周期必须在 1 到 168 小时之间');
   }
 
   saveSettingsButton.disabled = true;
@@ -169,6 +231,9 @@ async function saveSettings() {
           topLimit,
           treemapMaxVisible,
         },
+        searchOptions: {
+          indexIntervalHours: searchIndexIntervalHours,
+        },
       }),
     });
 
@@ -186,6 +251,17 @@ function clampNumber(value, min, max, fallback) {
     return fallback;
   }
   return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
+function formatTime(value) {
+  if (!value) {
+    return '-';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return '-';
+  }
+  return date.toLocaleString('zh-CN', { hour12: false });
 }
 
 function applyTheme(themeName) {
