@@ -8,7 +8,7 @@
 FN Tree 面向 fnOS / NAS 场景，解决两类常见问题：
 
 - 哪些目录和文件最占空间
-- 某个文件到底在哪个授权目录里
+- 某个文件到底在哪个目录里
 
 当前应用包含三个核心页面：
 
@@ -108,7 +108,7 @@ FNTree-
 源码主目录：
 
 ```text
-F:\FNTree-\.official\fntree
+.official\fntree
 ```
 
 常改动的位置：
@@ -130,21 +130,17 @@ F:\FNTree-\.official\fntree
 在 PowerShell 中进入应用目录：
 
 ```powershell
-Set-Location F:\FNTree-\.official\fntree
-& F:\FNTree-\.tooling\fnpack.exe build
+Set-Location FNTree\.official\fntree
+& FNTree\.tooling\fnpack.exe build
 ```
 
 打包成功后会生成：
 
 ```text
-F:\FNTree-\.official\fntree\fntree.fpk
+FNTree\.official\fntree\fntree.fpk
 ```
 
-测试安装包通常会复制到仓库根目录，命名格式为：
 
-```text
-F:\FNTree-\fntree_x.y.z_official_fnpack.fpk
-```
 
 注意：
 
@@ -178,11 +174,6 @@ F:\FNTree-\fntree_x.y.z_official_fnpack.fpk
 - 搜索索引周期
 - 参与索引的授权目录
 
-## 仓库说明
-
-- 主分支是 `master`，不是 `main`
-- 根目录下的 `fntree_*.fpk` 一般是测试安装包，不属于源码
-- `.gitignore` 已排除常见打包和验证产物
 
 ## 免责声明
 
