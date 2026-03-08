@@ -1,5 +1,5 @@
 appname               = fntree
-version               = 0.1.93
+version               = 0.1.94
 display_name          = FN Tree
 desc                  = fnOS 磁盘占用分析与文件搜索工具，集成 treemap、索引搜索与实时搜索能力。
 arch                  = x86_64
