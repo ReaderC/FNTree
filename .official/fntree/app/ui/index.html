@@ -1,21 +1,41 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no">
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no"
+    >
     <meta name="renderer" content="webkit">
     <title>FN Tree</title>
+    <script src="/theme.js"></script>
+    <script>
+      window.FNTreeTheme?.preloadTheme();
+    </script>
     <link rel="stylesheet" href="/vendor/mdui/mdui.css">
     <script src="/vendor/mdui/mdui.global.js"></script>
     <link rel="stylesheet" href="/styles.css">
   </head>
-  <body>
+  <body class="mode-tree">
     <div class="shell">
       <section class="hero">
         <div>
-          <div class="eyebrow">FNOS Storage Analyzer</div>
-          <h1>FN Tree</h1>
-          <p class="hero-copy">用 treemap 查看目录和文件占用。块越大，占用越高；点击即可逐层下钻。</p>
+          <div class="eyebrow" id="heroEyebrow">FNOS Storage Analyzer</div>
+          <div class="hero-mode-switch">
+            <span class="hero-prefix">FN</span>
+            <mdui-segmented-button-group
+              id="heroModeGroup"
+              class="hero-mode-group"
+              selects="single"
+              value="tree"
+            >
+              <mdui-segmented-button id="heroTreeTab" value="tree">Tree</mdui-segmented-button>
+              <mdui-segmented-button id="heroSearchTab" value="search">Search</mdui-segmented-button>
+            </mdui-segmented-button-group>
+          </div>
+          <p class="hero-copy" id="heroCopy">
+            用 treemap 查看目录和文件占用。块越大，占用越高；点击即可逐层下钻。
+          </p>
         </div>
         <div class="hero-card">
           <div class="metric-label">后端状态</div>
@@ -24,93 +44,330 @@
         </div>
       </section>
 
-      <section class="panel search-panel">
-        <div class="panel-header">
-          <div>
-            <h2>开始分析</h2>
-            <p>选择已授权目录并执行扫描，再在 treemap 中查看空间分布。</p>
-          </div>
-          <div class="header-actions">
-            <a class="button button-ghost" href="/search.html">文件搜索</a>
-            <button id="importResultButton" class="button button-ghost" type="button">导入结果</button>
-            <button id="historyToggleButton" class="button button-ghost" type="button">历史记录</button>
-            <a class="button button-ghost" href="/settings.html">扫描设置</a>
-          </div>
-        </div>
-
-        <div class="search-grid">
-          <div class="field path-picker">
-            <span class="field-label">已授权目录</span>
-            <button id="accessiblePathTrigger" class="path-picker-trigger" type="button">请选择已授权目录</button>
-            <div id="accessiblePathMenu" class="path-picker-menu" hidden></div>
-          </div>
-          <mdui-text-field id="pathInput" label="分析目录" placeholder="/vol1/media"></mdui-text-field>
-          <mdui-button id="analyzeButton" full-width>开始分析</mdui-button>
-        </div>
-
-        <div class="hint-row">
-          <div>
-            <div class="subtle-title">授权目录</div>
-            <div id="accessiblePathsEmpty">正在读取</div>
-            <div id="accessiblePathsList" class="chips"></div>
-          </div>
-          <div>
-            <div class="subtle-title">默认扫描配置</div>
-            <div id="scanOptionsSummary">读取中</div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel workspace-panel">
-        <div class="panel-header">
-          <div>
-            <h2>空间视图</h2>
-            <p>视觉大小以当前视图中的最大块为基准分配，其余块按相对比例展示；滚轮可逐步替换进更小的块。</p>
-          </div>
-          <div>
-            <div id="taskStatus">尚未开始</div>
-            <div id="taskProgress" class="task-progress">等待扫描任务</div>
-          </div>
-        </div>
-
-        <div class="workspace-grid">
-          <div class="card treemap-card">
-            <div class="card-top">
-              <div class="card-title">Treemap</div>
-              <div class="breadcrumb-actions">
-                <mdui-button id="zoomOutButton" variant="text">返回上级</mdui-button>
-                <mdui-button id="resetZoomButton" variant="text">回到根目录</mdui-button>
-              </div>
+      <div id="analysisStage" class="mode-stage is-active">
+        <section class="panel search-panel">
+          <div class="panel-header">
+            <div>
+              <h2>开始分析</h2>
+              <p>选择已授权目录并执行扫描，然后在 treemap 中查看空间分布。</p>
             </div>
-            <div class="treemap-toolbar">
-              <div id="breadcrumbBar" class="breadcrumb-bar">等待结果</div>
-              <div class="treemap-side">
-                <div id="detailLevelLabel" class="detail-level-label">滚轮细化 0</div>
-                <div id="treemapFilter" class="legend" role="radiogroup" aria-label="Treemap 显示类型">
-                  <button class="legend-chip legend-all is-selected" type="button" data-filter="all">全部</button>
-                  <button class="legend-chip legend-dir" type="button" data-filter="directory">目录占用</button>
-                  <button class="legend-chip legend-file" type="button" data-filter="file">文件占用</button>
+            <div class="header-actions">
+              <mdui-button id="importResultButton" variant="outlined">
+                <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M5 20h14v-2H5zm7-14l5.5 5.5l-1.42 1.42L13 9.84V17h-2V9.84l-3.08 3.08l-1.42-1.42z"
+                  />
+                </svg>
+                导入结果
+              </mdui-button>
+              <mdui-button id="historyToggleButton" variant="outlined">
+                <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M13 3a9 9 0 1 0 8.95 10h-2.02A7 7 0 1 1 13 5c1.93 0 3.68.78 4.95 2.05L14 11h7V4l-1.63 1.63A8.96 8.96 0 0 0 13 3m-1 5v6l5.25 3.15l.75-1.23l-4.5-2.67V8z"
+                  />
+                </svg>
+                历史记录
+              </mdui-button>
+              <mdui-button href="/settings.html?section=scan&return=tree" variant="outlined">
+                <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="m19.14 12.94l1.43-1.1l-1.5-2.6l-1.74.36a6.9 6.9 0 0 0-1.11-.64L16 7.2h-3l-.22 1.76c-.39.16-.76.37-1.11.64l-1.74-.36l-1.5 2.6l1.43 1.1a6.5 6.5 0 0 0 0 1.12l-1.43 1.1l1.5 2.6l1.74-.36c.35.27.72.48 1.11.64L13 20.8h3l.22-1.76c.39-.16.76-.37 1.11-.64l1.74.36l1.5-2.6l-1.43-1.1c.05-.37.05-.75 0-1.12M14.5 15a2.5 2.5 0 1 1 0-5a2.5 2.5 0 0 1 0 5"
+                  />
+                </svg>
+                设置
+              </mdui-button>
+            </div>
+          </div>
+
+          <div class="analysis-form-grid">
+            <div class="analysis-control-shell search-bar-shell">
+              <div class="field path-picker search-path-picker analysis-path-picker">
+                <span class="field-label search-inline-label">已授权目录</span>
+                <mdui-button-icon
+                  id="accessiblePathTrigger"
+                  class="path-picker-trigger search-scope-trigger"
+                  variant="outlined"
+                  aria-label="请选择已授权目录"
+                  title="请选择已授权目录"
+                >
+                  <svg class="search-scope-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M10 4l2 2h8a2 2 0 0 1 2 2v8.5A3.5 3.5 0 0 1 18.5 20h-13A3.5 3.5 0 0 1 2 16.5v-9A3.5 3.5 0 0 1 5.5 4zm9.5 4h-14A1.5 1.5 0 0 0 4 9.5v7A1.5 1.5 0 0 0 5.5 18h13a1.5 1.5 0 0 0 1.5-1.5z"
+                    />
+                  </svg>
+                  <span id="accessiblePathLabel" class="sr-only">请选择已授权目录</span>
+                </mdui-button-icon>
+                <div id="accessiblePathMenu" class="path-picker-menu" hidden></div>
+              </div>
+
+              <div class="field search-query-field analysis-query-field">
+                <span class="field-label search-inline-label">分析目录</span>
+                <input
+                  id="pathInput"
+                  class="analysis-path-input search-query-input analysis-query-input"
+                  placeholder="/vol1/media"
+                />
+              </div>
+
+              <mdui-button
+                id="analyzeButton"
+                class="primary-action-button search-submit-button search-submit-icon-button analysis-submit-button"
+                variant="filled"
+                aria-label="开始分析"
+              >
+                <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path fill="currentColor" d="M8 5v14l11-7z" />
+                </svg>
+                开始分析
+              </mdui-button>
+            </div>
+          </div>
+
+          <div class="hint-row analysis-hint-row">
+            <div>
+              <div class="subtle-title">默认扫描配置</div>
+              <div id="scanOptionsSummary">读取中</div>
+            </div>
+          </div>
+          <div id="accessiblePathsEmpty" hidden></div>
+          <div id="accessiblePathsList" class="chips" hidden></div>
+        </section>
+
+        <section class="panel workspace-panel">
+          <div class="panel-header">
+            <div>
+              <h2>空间视图</h2>
+              <p>当前视图会优先突出较大的目录或文件，滚轮可逐步查看更细的层级。</p>
+            </div>
+            <div>
+              <div id="taskStatus">尚未开始</div>
+              <div id="taskProgress" class="task-progress">等待扫描任务</div>
+            </div>
+          </div>
+
+          <div class="workspace-grid">
+            <div class="card treemap-card">
+              <div class="card-top">
+                <div class="card-title">Treemap</div>
+                <div class="breadcrumb-actions"></div>
+              </div>
+              <div class="treemap-toolbar">
+                <div id="breadcrumbBar" class="breadcrumb-bar">等待结果</div>
+                <div class="treemap-side">
+                  <div id="detailLevelLabel" class="detail-level-label">滚轮细化 0</div>
+                  <mdui-segmented-button-group
+                    id="treemapFilter"
+                    class="legend treemap-filter-group"
+                    selects="single"
+                    value="all"
+                  >
+                    <mdui-segmented-button value="all" data-filter="all">全部</mdui-segmented-button>
+                    <mdui-segmented-button value="directory" data-filter="directory">目录占用</mdui-segmented-button>
+                    <mdui-segmented-button value="file" data-filter="file">文件占用</mdui-segmented-button>
+                  </mdui-segmented-button-group>
                 </div>
               </div>
+              <div id="treemapView" class="treemap-empty">等待结果</div>
             </div>
-            <div id="treemapView" class="treemap-empty">等待结果</div>
+
+            <div class="card inspector-card">
+              <div class="card-title">详情</div>
+              <div id="selectionDetails" class="selection-empty">点击任意块查看详情</div>
+              <div class="inspector-actions">
+                <mdui-button id="exportResultButton" variant="tonal">导出结果</mdui-button>
+                <mdui-button id="copyPathButton" variant="tonal">复制路径</mdui-button>
+              </div>
+              <div class="inspector-list-header">
+                <div class="card-title sub-card-title">当前层级子项</div>
+                <div class="inspector-tip">点击目录可跳转</div>
+              </div>
+              <div id="childrenList" class="list-empty">等待结果</div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div id="searchStage" class="mode-stage">
+        <section class="panel integrated-search-panel">
+          <div class="panel-header">
+            <div>
+              <h2>开始搜索</h2>
+              <p>快速搜索走本地文件索引，实时搜索走 fd/fdfind。搜索结果只会出现在已授权目录内。</p>
+            </div>
+            <div class="header-actions">
+              <mdui-button id="searchReindexButton" variant="outlined">
+                <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M12 5V2L8 6l4 4V7c2.76 0 5 2.24 5 5a5 5 0 0 1-8.66 3.41l-1.42 1.42A7 7 0 1 0 12 5"
+                  />
+                </svg>
+                重建索引
+              </mdui-button>
+              <mdui-button href="/settings.html?section=search&return=search" variant="outlined">
+                <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="m19.14 12.94l1.43-1.1l-1.5-2.6l-1.74.36a6.9 6.9 0 0 0-1.11-.64L16 7.2h-3l-.22 1.76c-.39.16-.76.37-1.11.64l-1.74-.36l-1.5 2.6l1.43 1.1a6.5 6.5 0 0 0 0 1.12l-1.43 1.1l1.5 2.6l1.74-.36c.35.27.72.48 1.11.64L13 20.8h3l.22-1.76c.39-.16.76-.37 1.11-.64l1.74.36l1.5-2.6l-1.43-1.1c.05-.37.05-.75 0-1.12M14.5 15a2.5 2.5 0 1 1 0-5a2.5 2.5 0 0 1 0 5"
+                  />
+                </svg>
+                设置
+              </mdui-button>
+            </div>
           </div>
 
-          <div class="card inspector-card">
-            <div class="card-title">详情</div>
-            <div id="selectionDetails" class="selection-empty">点击任意块查看详情</div>
-            <div class="inspector-actions">
-              <mdui-button id="exportResultButton" variant="filled-tonal">导出结果</mdui-button>
-              <mdui-button id="copyPathButton" variant="filled-tonal">复制路径</mdui-button>
-            </div>
-            <div class="inspector-list-header">
-              <div class="card-title sub-card-title">当前层级子项</div>
-              <div class="inspector-tip">点击目录可跳转</div>
-            </div>
-            <div id="childrenList" class="list-empty">等待结果</div>
+          <div class="search-page-grid">
+            <section class="settings-card search-control-card">
+              <div class="search-control-head">
+                <div class="settings-label">搜索模式</div>
+                <div class="settings-help">快速搜索适合秒开查路径，实时搜索适合查刚新增的文件。</div>
+              </div>
+
+              <div class="search-form-grid">
+                <div class="search-bar-shell">
+                  <div class="field path-picker search-path-picker">
+                    <span class="field-label search-inline-label">搜索范围</span>
+                    <mdui-button-icon
+                      id="searchBasePathTrigger"
+                      class="path-picker-trigger search-scope-trigger"
+                      variant="outlined"
+                      aria-label="All accessible paths"
+                      title="All accessible paths"
+                    >
+                      <svg class="search-scope-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          fill="currentColor"
+                          d="M10 4l2 2h8a2 2 0 0 1 2 2v8.5A3.5 3.5 0 0 1 18.5 20h-13A3.5 3.5 0 0 1 2 16.5v-9A3.5 3.5 0 0 1 5.5 4zm9.5 4h-14A1.5 1.5 0 0 0 4 9.5v7A1.5 1.5 0 0 0 5.5 18h13a1.5 1.5 0 0 0 1.5-1.5z"
+                        />
+                      </svg>
+                      <span id="searchBasePathLabel" class="sr-only">全部已授权目录</span>
+                    </mdui-button-icon>
+                    <div id="searchBasePathMenu" class="path-picker-menu" hidden></div>
+                  </div>
+
+                  <div class="field search-query-field">
+                    <span class="field-label search-inline-label">关键词</span>
+                    <input
+                      id="searchQuery"
+                      class="analysis-path-input search-query-input"
+                      type="search"
+                      placeholder="例如：movie、.mkv、Conan"
+                      autocomplete="off"
+                    />
+                  </div>
+
+                  <mdui-button
+                    id="searchSubmitButton"
+                    class="primary-action-button search-submit-button search-submit-icon-button"
+                    variant="filled"
+                    aria-label="Start search"
+                  >
+                    <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      <path
+                        fill="currentColor"
+                        d="M9.5 3a6.5 6.5 0 0 1 5.174 10.438l5.194 5.194l-1.414 1.414l-5.194-5.194A6.5 6.5 0 1 1 9.5 3m0 2a4.5 4.5 0 1 0 0 9a4.5 4.5 0 0 0 0-9"
+                      />
+                    </svg>
+                    Search
+                  </mdui-button>
+                </div>
+
+                <div id="searchCurrentScope" class="search-current-scope">当前目录：全部已授权目录</div>
+
+                <mdui-segmented-button-group
+                  id="searchModeGroup"
+                  class="search-mode-inline"
+                  selects="single"
+                  value="quick"
+                >
+                  <mdui-segmented-button value="quick" data-mode="quick">快速搜索</mdui-segmented-button>
+                  <mdui-segmented-button value="live" data-mode="live">实时搜索</mdui-segmented-button>
+                </mdui-segmented-button-group>
+              </div>
+
+              <div class="search-action-row">
+                <div id="searchSummary" class="settings-status">正在读取搜索能力</div>
+              </div>
+            </section>
           </div>
-        </div>
-      </section>
+        </section>
+
+        <section class="panel integrated-search-results-panel">
+          <div class="search-results-grid">
+            <section class="settings-card search-results-card">
+              <div class="search-results-header">
+                <div>
+                  <div class="card-title">结果列表</div>
+                  <div id="searchResultMeta" class="settings-help">输入关键词后开始搜索</div>
+                </div>
+                <div class="search-results-toolbar">
+                  <mdui-segmented-button-group
+                    id="searchTypeFilterGroup"
+                    class="search-mode-inline search-type-filter-group"
+                    selects="single"
+                    value="all"
+                  >
+                    <mdui-segmented-button value="all">全部结果</mdui-segmented-button>
+                    <mdui-segmented-button value="directory">只看文件夹</mdui-segmented-button>
+                    <mdui-segmented-button value="file">只看文件</mdui-segmented-button>
+                  </mdui-segmented-button-group>
+                  <div class="search-sort-group">
+                    <label class="sr-only" for="searchSortSelect">搜索结果排序项</label>
+                    <mdui-select
+                      id="searchSortSelect"
+                      class="search-sort-select"
+                      value="relevance"
+                      aria-label="搜索结果排序项"
+                    >
+                      <mdui-menu-item value="relevance">按匹配顺序</mdui-menu-item>
+                      <mdui-menu-item value="size">按大小</mdui-menu-item>
+                      <mdui-menu-item value="mtime">按时间</mdui-menu-item>
+                      <mdui-menu-item value="name">按名称</mdui-menu-item>
+                    </mdui-select>
+                    <label class="sr-only" for="searchSortDirection">搜索结果排序方向</label>
+                    <mdui-select
+                      id="searchSortDirection"
+                      class="search-sort-direction"
+                      value="desc"
+                      aria-label="搜索结果排序方向"
+                    >
+                      <mdui-menu-item value="desc">降序</mdui-menu-item>
+                      <mdui-menu-item value="asc">升序</mdui-menu-item>
+                    </mdui-select>
+                  </div>
+                </div>
+                <mdui-button id="searchResetButton" variant="tonal">
+                  <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      fill="currentColor"
+                      d="M14 3h-4l-1 1H5v2h14V4h-4zm-7 6v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9zm2 2h2v7H9zm4 0h2v7h-2z"
+                    />
+                  </svg>
+                  清空结果
+                </mdui-button>
+              </div>
+              <div id="searchResultList" class="search-result-list list-empty">还没有搜索结果</div>
+            </section>
+
+            <section class="settings-card search-detail-card">
+              <div class="card-title">结果详情</div>
+              <div id="searchSelection" class="selection-empty">点击左侧结果查看详情</div>
+              <div class="inspector-actions search-detail-actions">
+                <mdui-button id="searchCopyPathButton" variant="tonal">复制路径</mdui-button>
+              </div>
+              <div class="inspector-list-header search-children-header">
+                <div class="card-title sub-card-title">当前目录内容</div>
+                <div class="inspector-tip">选中文件夹后显示内部文件</div>
+              </div>
+              <div id="searchChildrenList" class="list-empty">当前未选中文件夹</div>
+            </section>
+          </div>
+        </section>
+      </div>
     </div>
 
     <div id="historyBackdrop" class="history-backdrop" hidden></div>
@@ -121,8 +378,8 @@
           <div class="history-drawer-copy">保留最近 20 次分析任务，方便回看结果和重新分析。</div>
         </div>
         <div class="history-drawer-actions">
-          <mdui-button id="clearTasksButton" variant="text">清空记录</mdui-button>
-          <button id="historyCloseButton" class="button button-ghost" type="button">关闭</button>
+          <mdui-button id="clearTasksButton" variant="outlined">清空记录</mdui-button>
+          <mdui-button id="historyCloseButton" variant="outlined">关闭</mdui-button>
         </div>
       </div>
       <div id="recentTasks" class="recent-empty">还没有分析记录</div>
@@ -131,5 +388,7 @@
     <input id="importResultInput" type="file" accept=".json,.fntree.json,application/json" hidden>
 
     <script src="/app.js"></script>
+    <script src="/search.js"></script>
   </body>
 </html>
+
