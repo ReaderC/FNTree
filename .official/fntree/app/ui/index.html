@@ -101,7 +101,7 @@
                   </svg>
                   <span id="accessiblePathLabel" class="sr-only">请选择已授权目录</span>
                 </mdui-button-icon>
-                <div id="accessiblePathMenu" class="path-picker-menu" hidden></div>
+                <mdui-menu id="accessiblePathMenu" class="path-picker-menu" hidden></mdui-menu>
               </div>
 
               <div class="field search-query-field analysis-query-field">
@@ -246,7 +246,7 @@
                       </svg>
                       <span id="searchBasePathLabel" class="sr-only">全部已授权目录</span>
                     </mdui-button-icon>
-                    <div id="searchBasePathMenu" class="path-picker-menu" hidden></div>
+                    <mdui-menu id="searchBasePathMenu" class="path-picker-menu" hidden></mdui-menu>
                   </div>
 
                   <div class="field search-query-field">
@@ -255,7 +255,7 @@
                       id="searchQuery"
                       class="analysis-path-input search-query-input"
                       type="search"
-                      placeholder="例如：movie、.mkv、Conan"
+                      placeholder="关键词，或 @子目录 /绝对路径 后继续选目录"
                       autocomplete="off"
                     />
                   </div>
@@ -300,9 +300,9 @@
           <div class="search-results-grid">
             <section class="settings-card search-results-card">
               <div class="search-results-header">
-                <div>
+                <div class="search-results-heading">
                   <div class="card-title">结果列表</div>
-                  <div id="searchResultMeta" class="settings-help">输入关键词后开始搜索</div>
+                  <div id="searchResultMeta" class="search-result-meta-inline">输入关键词后开始搜索</div>
                 </div>
                 <div class="search-results-toolbar">
                   <mdui-segmented-button-group
@@ -316,40 +316,65 @@
                     <mdui-segmented-button value="file">只看文件</mdui-segmented-button>
                   </mdui-segmented-button-group>
                   <div class="search-sort-group">
-                    <label class="sr-only" for="searchSortSelect">搜索结果排序项</label>
-                    <mdui-select
-                      id="searchSortSelect"
-                      class="search-sort-select"
-                      value="relevance"
-                      aria-label="搜索结果排序项"
-                    >
-                      <mdui-menu-item value="relevance">按匹配顺序</mdui-menu-item>
-                      <mdui-menu-item value="size">按大小</mdui-menu-item>
-                      <mdui-menu-item value="mtime">按时间</mdui-menu-item>
-                      <mdui-menu-item value="name">按名称</mdui-menu-item>
-                    </mdui-select>
-                    <label class="sr-only" for="searchSortDirection">搜索结果排序方向</label>
-                    <mdui-select
-                      id="searchSortDirection"
-                      class="search-sort-direction"
-                      value="desc"
-                      aria-label="搜索结果排序方向"
-                    >
-                      <mdui-menu-item value="desc">降序</mdui-menu-item>
-                      <mdui-menu-item value="asc">升序</mdui-menu-item>
-                    </mdui-select>
+                    <div class="search-sort-dropdown">
+                      <mdui-button
+                        id="searchSortTrigger"
+                        variant="text"
+                        class="search-sort-trigger"
+                        aria-label="搜索结果排序项"
+                      >
+                        <span id="searchSortTriggerLabel">按匹配顺序</span>
+                        <svg slot="end-icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="currentColor" d="M7 10l5 5l5-5z" />
+                        </svg>
+                      </mdui-button>
+                      <mdui-menu id="searchSortMenu" class="search-sort-menu" hidden>
+                        <mdui-menu-item value="relevance">按匹配顺序</mdui-menu-item>
+                        <mdui-menu-item value="size">按大小</mdui-menu-item>
+                        <mdui-menu-item value="mtime">按时间</mdui-menu-item>
+                        <mdui-menu-item value="name">按名称</mdui-menu-item>
+                      </mdui-menu>
+                    </div>
+                    <div class="search-sort-dropdown search-sort-direction-dropdown">
+                      <mdui-button
+                        id="searchSortDirectionTrigger"
+                        variant="text"
+                        class="search-sort-trigger search-sort-direction-trigger"
+                        aria-label="搜索结果排序方向"
+                      >
+                        <span id="searchSortDirectionLabel">降序</span>
+                        <svg slot="end-icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          <path fill="currentColor" d="M7 10l5 5l5-5z" />
+                        </svg>
+                      </mdui-button>
+                      <mdui-menu
+                        id="searchSortDirectionMenu"
+                        class="search-sort-menu search-sort-direction-menu"
+                        hidden
+                      >
+                        <mdui-menu-item value="desc">降序</mdui-menu-item>
+                        <mdui-menu-item value="asc">升序</mdui-menu-item>
+                      </mdui-menu>
+                    </div>
+                    <mdui-tooltip class="search-reset-tooltip" content="清空结果" placement="top">
+                      <mdui-button-icon
+                        id="searchResetButton"
+                        variant="tonal"
+                        class="search-reset-inline search-reset-circle-button"
+                        aria-label="清空结果"
+                      >
+                        <svg class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            fill="currentColor"
+                            d="M14 3h-4l-1 1H5v2h14V4h-4zm-7 6v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9zm2 2h2v7H9zm4 0h2v7h-2z"
+                          />
+                        </svg>
+                      </mdui-button-icon>
+                    </mdui-tooltip>
                   </div>
                 </div>
-                <mdui-button id="searchResetButton" variant="tonal">
-                  <svg slot="icon" class="button-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      fill="currentColor"
-                      d="M14 3h-4l-1 1H5v2h14V4h-4zm-7 6v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9zm2 2h2v7H9zm4 0h2v7h-2z"
-                    />
-                  </svg>
-                  清空结果
-                </mdui-button>
               </div>
+              <div id="searchResultBreadcrumb" class="search-result-breadcrumb" hidden></div>
               <div id="searchResultList" class="search-result-list list-empty">还没有搜索结果</div>
             </section>
 
@@ -359,11 +384,6 @@
               <div class="inspector-actions search-detail-actions">
                 <mdui-button id="searchCopyPathButton" variant="tonal">复制路径</mdui-button>
               </div>
-              <div class="inspector-list-header search-children-header">
-                <div class="card-title sub-card-title">当前目录内容</div>
-                <div class="inspector-tip">选中文件夹后显示内部文件</div>
-              </div>
-              <div id="searchChildrenList" class="list-empty">当前未选中文件夹</div>
             </section>
           </div>
         </section>

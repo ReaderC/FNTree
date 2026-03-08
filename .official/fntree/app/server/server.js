@@ -365,54 +365,47 @@ async function handleApi(req, res, url) {
   if (req.method === 'POST' && url.pathname === '/api/search') {
     const body = await readBody(req);
     const payload = parseJson(body);
-    const query = typeof payload.query === 'string' ? payload.query.trim() : '';
+    const rawQuery = typeof payload.query === 'string' ? payload.query.trim() : '';
     const mode = payload.mode === 'live' ? 'live' : 'quick';
     const requestedBasePath =
       typeof payload.basePath === 'string' ? payload.basePath.trim() : '';
 
-    if (!query) {
-      writeJson(res, 400, {
-        error: 'invalid_query',
-        message: 'Search query is required.',
-      });
-      return;
-    }
-
     const settings = readSettings();
-    const access =
-      requestedBasePath && requestedBasePath !== '*'
-        ? validatePathAccess(requestedBasePath, settings.accessiblePaths)
-        : { ok: true };
-
-    if (!access.ok) {
-      writeJson(res, 403, {
-        error: 'path_not_authorized',
-        message: access.message,
-        accessiblePaths: settings.accessiblePaths,
-      });
-      return;
-    }
-
-    const basePath = requestedBasePath && requestedBasePath !== '*' ? requestedBasePath : '';
     const requestedLimit = normalizeSearchLimit(
       payload.limit,
       mode === 'live' ? settings.searchOptions.liveLimit : settings.searchOptions.quickLimit,
     );
     maybeScheduleSearchIndexRefresh(settings);
 
+    let resolvedSearch;
+    try {
+      resolvedSearch = resolveSearchRequest({
+        rawQuery,
+        requestedBasePath,
+        accessiblePaths: settings.accessiblePaths,
+      });
+    } catch (error) {
+      writeJson(res, error.statusCode || 400, {
+        error: error.code || 'invalid_query',
+        message: error.message,
+        accessiblePaths: settings.accessiblePaths,
+      });
+      return;
+    }
+
     try {
       const result = await searchPaths({
         mode,
-        query,
-        basePath,
+        query: resolvedSearch.query,
+        basePath: resolvedSearch.basePath,
         limit: requestedLimit,
         accessiblePaths: settings.accessiblePaths,
       });
 
       writeJson(res, 200, {
         mode,
-        query,
-        basePath: basePath || null,
+        query: resolvedSearch.query,
+        basePath: resolvedSearch.basePath || null,
         total: result.items.length,
         backend: result.backend,
         limit: requestedLimit || null,
@@ -615,6 +608,142 @@ function validatePathAccess(targetPath, accessiblePaths) {
     ok: false,
     message: 'The selected path is outside the directories authorized for this app.',
   };
+}
+
+function resolveSearchRequest(options) {
+  const rawQuery = typeof options.rawQuery === 'string' ? options.rawQuery.trim() : '';
+  const accessiblePaths = Array.isArray(options.accessiblePaths) ? options.accessiblePaths : [];
+  const requestedBasePath =
+    typeof options.requestedBasePath === 'string' ? options.requestedBasePath.trim() : '';
+
+  if (!rawQuery) {
+    const error = new Error('请输入要搜索的关键词');
+    error.code = 'invalid_query';
+    error.statusCode = 400;
+    throw error;
+  }
+
+  let basePath = requestedBasePath && requestedBasePath !== '*' ? requestedBasePath : '';
+  if (basePath) {
+    const access = validatePathAccess(basePath, accessiblePaths);
+    if (!access.ok) {
+      const error = new Error(access.message);
+      error.code = 'path_not_authorized';
+      error.statusCode = 403;
+      throw error;
+    }
+    basePath = path.resolve(basePath);
+  }
+
+  let query = rawQuery;
+
+  if (rawQuery.startsWith('@')) {
+    if (!basePath) {
+      const error = new Error('使用 @子目录 搜索前，请先选择一个已授权目录作为基础目录。');
+      error.code = 'relative_scope_requires_base';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const parsed = splitScopedQuery(rawQuery.slice(1), '@');
+    const relativeScope = parsed.scopePath.replace(/^[/\\]+/, '');
+    const resolvedScope = path.resolve(basePath, relativeScope);
+
+    if (
+      resolvedScope !== basePath &&
+      !resolvedScope.startsWith(`${basePath}${path.sep}`)
+    ) {
+      const error = new Error('指定的 @ 子目录超出了当前已选目录范围。');
+      error.code = 'relative_scope_outside_base';
+      error.statusCode = 400;
+      throw error;
+    }
+
+    ensureSearchScopeDirectory(resolvedScope);
+    query = parsed.query;
+    basePath = resolvedScope;
+  } else if (rawQuery.startsWith('/')) {
+    const parsed = splitScopedQuery(rawQuery, '/');
+    const resolvedScope = path.resolve(parsed.scopePath);
+    const access = validatePathAccess(resolvedScope, accessiblePaths);
+    if (!access.ok) {
+      const error = new Error(access.message);
+      error.code = 'path_not_authorized';
+      error.statusCode = 403;
+      throw error;
+    }
+
+    ensureSearchScopeDirectory(resolvedScope);
+    query = parsed.query;
+    basePath = resolvedScope;
+  }
+
+  if (!query) {
+    const error = new Error(
+      '请输入搜索关键词。用法示例：@photos cat 或 /vol1/1000/Dev/photos cat',
+    );
+    error.code = 'invalid_query';
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return {
+    query,
+    basePath,
+  };
+}
+
+function splitScopedQuery(input, modePrefix) {
+  const normalized = typeof input === 'string' ? input.trim() : '';
+  if (!normalized) {
+    const error = new Error(
+      modePrefix === '@'
+        ? '请输入 @ 后的子目录路径，例如 @photos cat'
+        : '请输入 / 开头的绝对路径，例如 /vol1/1000/Dev/photos cat',
+    );
+    error.code = 'invalid_scope_path';
+    error.statusCode = 400;
+    throw error;
+  }
+
+  const firstWhitespaceIndex = normalized.search(/\s/);
+  if (firstWhitespaceIndex === -1) {
+    return {
+      scopePath: normalized,
+      query: '',
+    };
+  }
+
+  return {
+    scopePath: normalized.slice(0, firstWhitespaceIndex).trim(),
+    query: normalized.slice(firstWhitespaceIndex).trim(),
+  };
+}
+
+function ensureSearchScopeDirectory(targetPath) {
+  if (!fs.existsSync(targetPath)) {
+    const error = new Error(`指定的搜索目录不存在：${targetPath}`);
+    error.code = 'search_scope_not_found';
+    error.statusCode = 404;
+    throw error;
+  }
+
+  let stats;
+  try {
+    stats = fs.statSync(targetPath);
+  } catch {
+    const error = new Error(`无法读取搜索目录：${targetPath}`);
+    error.code = 'search_scope_unreadable';
+    error.statusCode = 400;
+    throw error;
+  }
+
+  if (!stats.isDirectory()) {
+    const error = new Error(`指定的搜索范围不是文件夹：${targetPath}`);
+    error.code = 'search_scope_not_directory';
+    error.statusCode = 400;
+    throw error;
+  }
 }
 
 function createTask(targetPath, scanOptions) {

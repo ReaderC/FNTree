@@ -11,15 +11,31 @@
   const searchCurrentScope = document.getElementById('searchCurrentScope');
   const searchSummary = document.getElementById('searchSummary');
   const searchResultMeta = document.getElementById('searchResultMeta');
+  const searchResultBreadcrumb = document.getElementById('searchResultBreadcrumb');
   const searchResultList = document.getElementById('searchResultList');
   const searchTypeFilterGroup = document.getElementById('searchTypeFilterGroup');
-  const searchSortSelect = document.getElementById('searchSortSelect');
-  const searchSortDirection = document.getElementById('searchSortDirection');
+  const searchSortTrigger = document.getElementById('searchSortTrigger');
+  const searchSortTriggerLabel = document.getElementById('searchSortTriggerLabel');
+  const searchSortDirectionTrigger = document.getElementById('searchSortDirectionTrigger');
+  const searchSortDirectionLabel = document.getElementById('searchSortDirectionLabel');
+  const searchSortMenu = document.getElementById('searchSortMenu');
+  const searchSortDirectionMenu = document.getElementById('searchSortDirectionMenu');
   const searchSelection = document.getElementById('searchSelection');
-  const searchChildrenList = document.getElementById('searchChildrenList');
   const searchCopyPathButton = document.getElementById('searchCopyPathButton');
   const searchReindexButton =
     document.getElementById('searchReindexButton') || { disabled: false, addEventListener() {} };
+  const searchSortItems = Array.from(
+    document.querySelectorAll('#searchSortMenu mdui-menu-item'),
+  );
+  const searchDirectionItems = Array.from(
+    document.querySelectorAll('#searchSortDirectionMenu mdui-menu-item'),
+  );
+  const searchScopeSuggestMenu = document.createElement('mdui-menu');
+  const searchSortMenuAnchors = new Map([
+    [searchSortMenu, searchSortTrigger],
+    [searchSortDirectionMenu, searchSortDirectionTrigger],
+  ]);
+  let searchScopeSuggestRequestId = 0;
 
   if (
     !searchModeGroup ||
@@ -32,12 +48,16 @@
     !searchCurrentScope ||
     !searchSummary ||
     !searchResultMeta ||
+    !searchResultBreadcrumb ||
     !searchResultList ||
     !searchTypeFilterGroup ||
-    !searchSortSelect ||
-    !searchSortDirection ||
+    !searchSortTrigger ||
+    !searchSortTriggerLabel ||
+    !searchSortDirectionTrigger ||
+    !searchSortDirectionLabel ||
+    !searchSortMenu ||
+    !searchSortDirectionMenu ||
     !searchSelection ||
-    !searchChildrenList ||
     !searchCopyPathButton
   ) {
     return;
@@ -63,16 +83,23 @@
     rawResults: [],
     results: [],
     selectedPath: '',
+    selectedItem: null,
     resultFilter: 'all',
     resultSort: 'relevance',
     resultDirection: 'desc',
-    selectedChildren: [],
+    resultViewItems: [],
+    resultViewStack: [],
     searchStatus: null,
     searchOptions: {
       quickLimit: 0,
       liveLimit: 0,
     },
+    scopeSuggestOpen: false,
   };
+
+  setupSearchScopeSuggestMenu();
+  setupSearchBasePathMenu();
+  setupSearchSortMenus();
 
   bootstrap().catch((error) => {
     showError(error.message || '初始化搜索页失败');
@@ -87,6 +114,7 @@
     if (!state.accessiblePaths.length) {
       return;
     }
+    closeSearchScopeSuggestMenu();
     renderBasePathMenu();
     setBasePathMenuOpen(!state.basePathMenuOpen);
   });
@@ -106,6 +134,7 @@
   });
 
   searchSubmitButton.addEventListener('click', () => {
+    closeSearchScopeSuggestMenu();
     runSearch().catch((error) => {
       showError(error.message || '搜索失败');
     });
@@ -113,11 +142,15 @@
 
   searchResetButton.addEventListener('click', () => {
     searchQuery.value = '';
+    closeSearchScopeSuggestMenu();
     state.rawResults = [];
     state.results = [];
     state.selectedPath = '';
-    state.selectedChildren = [];
+    state.selectedItem = null;
+    state.resultViewItems = [];
+    state.resultViewStack = [];
     renderResults();
+    renderResultBreadcrumb();
     void renderSelection(null);
     searchResultMeta.textContent = '已清空结果';
   });
@@ -127,27 +160,389 @@
     applyResultView();
   });
 
-  searchSortSelect.addEventListener('change', () => {
-    state.resultSort = normalizeResultSort(searchSortSelect.value);
-    applyResultView();
+  searchSortItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      state.resultSort = normalizeResultSort(item.value);
+      applyResultView();
+      updateSortTriggerLabels();
+      closeSearchSortDropdowns();
+    });
   });
 
-  searchSortDirection.addEventListener('change', () => {
-    state.resultDirection = normalizeSortDirection(searchSortDirection.value);
-    applyResultView();
+  searchDirectionItems.forEach((item) => {
+    item.addEventListener('click', () => {
+      state.resultDirection = normalizeSortDirection(item.value);
+      applyResultView();
+      updateSortTriggerLabels();
+      closeSearchSortDropdowns();
+    });
+  });
+
+  searchSortTrigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shouldOpen = searchSortMenu.hasAttribute('hidden');
+    closeSearchSortDropdowns();
+    if (shouldOpen) {
+      openSearchSortMenu(searchSortMenu);
+    }
+  });
+
+  searchSortDirectionTrigger.addEventListener('click', (event) => {
+    event.stopPropagation();
+    const shouldOpen = searchSortDirectionMenu.hasAttribute('hidden');
+    closeSearchSortDropdowns();
+    if (shouldOpen) {
+      openSearchSortMenu(searchSortDirectionMenu);
+    }
+  });
+
+  function syncSearchSortMenus() {
+    searchSortItems.forEach((item) => {
+      item.toggleAttribute('selected', item.value === state.resultSort);
+    });
+    searchDirectionItems.forEach((item) => {
+      item.toggleAttribute('selected', item.value === state.resultDirection);
+    });
+  }
+
+  function setupSearchSortMenus() {
+    [searchSortMenu, searchSortDirectionMenu].forEach((menu) => {
+      document.body.append(menu);
+      menu.setAttribute('hidden', '');
+    });
+    updateSearchSortTriggerState();
+  }
+
+  function setupSearchScopeSuggestMenu() {
+    searchScopeSuggestMenu.className = 'path-picker-menu search-scope-suggest-menu';
+    searchScopeSuggestMenu.setAttribute('hidden', '');
+    document.body.append(searchScopeSuggestMenu);
+  }
+
+  function setupSearchBasePathMenu() {
+    document.body.append(searchBasePathMenu);
+    searchBasePathMenu.setAttribute('hidden', '');
+    updateBasePathTriggerState();
+  }
+
+  function positionFloatingMenu(menu, trigger, minimumWidth = 0) {
+    if (!(trigger instanceof HTMLElement)) {
+      return;
+    }
+
+    const triggerRect = trigger.getBoundingClientRect();
+    const viewportWidth = document.documentElement.clientWidth;
+    const gutter = 12;
+    const gap = 6;
+    const triggerWidth = Math.ceil(triggerRect.width);
+
+    menu.style.visibility = 'hidden';
+    menu.removeAttribute('hidden');
+
+    const measuredWidth = Math.ceil(menu.offsetWidth);
+    const menuWidth = Math.max(minimumWidth, triggerWidth, measuredWidth);
+    const maxLeft = Math.max(gutter, viewportWidth - menuWidth - gutter);
+    const left = Math.min(Math.max(gutter, Math.round(triggerRect.left)), maxLeft);
+
+    menu.style.left = `${left}px`;
+    menu.style.top = `${Math.round(triggerRect.bottom + gap)}px`;
+    menu.style.minWidth = `${Math.max(minimumWidth, triggerWidth)}px`;
+    menu.style.maxWidth = `${Math.max(minimumWidth, triggerWidth)}px`;
+    menu.style.visibility = '';
+  }
+
+  function closeSearchScopeSuggestMenu() {
+    state.scopeSuggestOpen = false;
+    searchScopeSuggestMenu.setAttribute('hidden', '');
+  }
+
+  function openSearchScopeSuggestMenu() {
+    state.scopeSuggestOpen = true;
+    positionFloatingMenu(searchScopeSuggestMenu, searchQuery, 360);
+  }
+
+  function normalizeScopePath(value) {
+    return String(value || '')
+      .replace(/\\/g, '/')
+      .replace(/\/+/g, '/')
+      .replace(/\/$/, '');
+  }
+
+  function joinScopePath(basePath, relativePath) {
+    const normalizedBase = normalizeScopePath(basePath);
+    const normalizedRelative = String(relativePath || '').replace(/^\/+|\/+$/g, '');
+    if (!normalizedRelative) {
+      return normalizedBase;
+    }
+    return `${normalizedBase}/${normalizedRelative}`;
+  }
+
+  function getSearchScopeDraft() {
+    const rawValue = searchQuery.value.trim();
+    if (!rawValue || /\s/.test(rawValue)) {
+      return null;
+    }
+    if (rawValue.startsWith('@')) {
+      return { mode: '@', token: rawValue.slice(1) };
+    }
+    if (rawValue.startsWith('/')) {
+      return { mode: '/', token: rawValue };
+    }
+    return null;
+  }
+
+  function splitScopeToken(value) {
+    const normalized = String(value || '').replace(/\\/g, '/');
+    const hasTrailingSlash = normalized.endsWith('/');
+    const trimmed = normalized.replace(/\/+$/g, '');
+    if (!trimmed) {
+      return { parent: '', partial: '', hasTrailingSlash };
+    }
+
+    const lastSlashIndex = trimmed.lastIndexOf('/');
+    if (hasTrailingSlash) {
+      return { parent: trimmed, partial: '', hasTrailingSlash };
+    }
+    if (lastSlashIndex === -1) {
+      return { parent: '', partial: trimmed, hasTrailingSlash };
+    }
+    return {
+      parent: trimmed.slice(0, lastSlashIndex),
+      partial: trimmed.slice(lastSlashIndex + 1),
+      hasTrailingSlash,
+    };
+  }
+
+  async function fetchDirectorySuggestions(pathValue, partial = '') {
+    const response = await fetchJson(`/api/search/children?path=${encodeURIComponent(pathValue)}`);
+    const partialLower = String(partial || '').toLowerCase();
+    return (Array.isArray(response.items) ? response.items : [])
+      .filter((item) => item?.type === 'directory')
+      .filter((item) =>
+        !partialLower || String(item.name || '').toLowerCase().includes(partialLower),
+      );
+  }
+
+  async function updateSearchScopeSuggestions() {
+    const draft = getSearchScopeDraft();
+    const requestId = ++searchScopeSuggestRequestId;
+
+    if (!draft) {
+      closeSearchScopeSuggestMenu();
+      return;
+    }
+
+    let suggestions = [];
+
+    try {
+      if (draft.mode === '@') {
+        if (!state.basePath) {
+          closeSearchScopeSuggestMenu();
+          return;
+        }
+
+        const relative = splitScopeToken(draft.token);
+        const parentPath = joinScopePath(state.basePath, relative.parent);
+        const prefix = `@${relative.parent ? `${relative.parent}/` : ''}`;
+        const items = await fetchDirectorySuggestions(parentPath, relative.partial);
+        suggestions = items.map((item) => ({
+          label: item.path,
+          insertValue: `${prefix}${item.name}/`,
+        }));
+      } else {
+        const absoluteDraft = draft.token.replace(/\\/g, '/');
+        const normalizedAccessible = state.accessiblePaths.map((item) => normalizeScopePath(item));
+        const matchedBase = normalizedAccessible
+          .filter(
+            (item) => absoluteDraft === item || absoluteDraft.startsWith(`${item}/`),
+          )
+          .sort((a, b) => b.length - a.length)[0];
+
+        if (!matchedBase) {
+          suggestions = normalizedAccessible
+            .filter((item) => item.startsWith(absoluteDraft))
+            .map((item) => ({
+              label: item,
+              insertValue: `${item}/`,
+            }));
+        } else {
+          const relativeDraft = absoluteDraft.slice(matchedBase.length).replace(/^\/+/, '');
+          const split = splitScopeToken(relativeDraft);
+          const parentPath = joinScopePath(matchedBase, split.parent);
+          const prefix = `${normalizeScopePath(parentPath)}/`;
+          const items = await fetchDirectorySuggestions(parentPath, split.partial);
+          suggestions = items.map((item) => ({
+            label: item.path,
+            insertValue: `${prefix}${item.name}/`,
+          }));
+        }
+      }
+    } catch {
+      closeSearchScopeSuggestMenu();
+      return;
+    }
+
+    if (requestId !== searchScopeSuggestRequestId) {
+      return;
+    }
+
+    if (!suggestions.length) {
+      closeSearchScopeSuggestMenu();
+      return;
+    }
+
+    renderSearchScopeSuggestions(suggestions);
+    openSearchScopeSuggestMenu();
+  }
+
+  function renderSearchScopeSuggestions(items) {
+    searchScopeSuggestMenu.innerHTML = '';
+    items.forEach((item) => {
+      const menuItem = document.createElement('mdui-menu-item');
+      menuItem.textContent = item.label;
+      menuItem.addEventListener('click', () => {
+        searchQuery.value = item.insertValue;
+        searchQuery.focus();
+        void updateSearchScopeSuggestions();
+      });
+      searchScopeSuggestMenu.append(menuItem);
+    });
+  }
+
+  function positionSearchSortMenu(menu) {
+    const trigger = searchSortMenuAnchors.get(menu);
+    positionFloatingMenu(menu, trigger);
+  }
+
+  function openSearchSortMenu(menu) {
+    syncSearchSortMenus();
+    positionSearchSortMenu(menu);
+    updateSearchSortTriggerState();
+  }
+
+  function closeSearchSortDropdowns() {
+    searchSortMenu.setAttribute('hidden', '');
+    searchSortDirectionMenu.setAttribute('hidden', '');
+    updateSearchSortTriggerState();
+  }
+
+  function updateSearchSortTriggerState() {
+    searchSortTrigger.setAttribute(
+      'aria-expanded',
+      searchSortMenu.hasAttribute('hidden') ? 'false' : 'true',
+    );
+    searchSortDirectionTrigger.setAttribute(
+      'aria-expanded',
+      searchSortDirectionMenu.hasAttribute('hidden') ? 'false' : 'true',
+    );
+  }
+
+  function sortLabel(value) {
+    if (value === 'size') return '按大小';
+    if (value === 'mtime') return '按时间';
+    if (value === 'name') return '按名称';
+    return '按匹配顺序';
+  }
+
+  function directionLabel(value) {
+    return value === 'asc' ? '升序' : '降序';
+  }
+
+  function updateSortTriggerLabels() {
+    searchSortTriggerLabel.textContent = sortLabel(state.resultSort);
+    searchSortDirectionLabel.textContent = directionLabel(state.resultDirection);
+    syncSearchSortMenus();
+  }
+
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (
+      target instanceof Node &&
+      (searchSortTrigger.contains(target) ||
+        searchSortDirectionTrigger.contains(target) ||
+        searchSortMenu.contains(target) ||
+        searchSortDirectionMenu.contains(target))
+    ) {
+      return;
+    }
+    closeSearchSortDropdowns();
+  });
+
+  document.addEventListener('click', (event) => {
+    const target = event.target;
+    if (
+      target instanceof Node &&
+      (searchQuery.contains(target) || searchScopeSuggestMenu.contains(target))
+    ) {
+      return;
+    }
+    closeSearchScopeSuggestMenu();
+  });
+
+  window.addEventListener(
+    'scroll',
+    () => {
+      setBasePathMenuOpen(false);
+      closeSearchSortDropdowns();
+      closeSearchScopeSuggestMenu();
+    },
+    true,
+  );
+
+  document.addEventListener(
+    'wheel',
+    () => {
+      setBasePathMenuOpen(false);
+      closeSearchSortDropdowns();
+      closeSearchScopeSuggestMenu();
+    },
+    { capture: true, passive: true },
+  );
+
+  document.addEventListener(
+    'touchmove',
+    () => {
+      setBasePathMenuOpen(false);
+      closeSearchSortDropdowns();
+      closeSearchScopeSuggestMenu();
+    },
+    { capture: true, passive: true },
+  );
+
+  window.addEventListener('resize', () => {
+    setBasePathMenuOpen(false);
+    closeSearchSortDropdowns();
+    closeSearchScopeSuggestMenu();
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      setBasePathMenuOpen(false);
+      closeSearchSortDropdowns();
+      closeSearchScopeSuggestMenu();
+    }
   });
 
   searchQuery.addEventListener('keydown', (event) => {
     if (event.key === 'Enter') {
       event.preventDefault();
+      closeSearchScopeSuggestMenu();
       runSearch().catch((error) => {
         showError(error.message || '搜索失败');
       });
     }
   });
 
+  searchQuery.addEventListener('input', () => {
+    void updateSearchScopeSuggestions();
+  });
+
+  searchQuery.addEventListener('focus', () => {
+    void updateSearchScopeSuggestions();
+  });
+
   searchCopyPathButton.addEventListener('click', async () => {
-    const item = state.results.find((entry) => entry.path === state.selectedPath);
+    const item = state.selectedItem;
     if (!item) {
       showError('当前没有可复制的搜索结果');
       return;
@@ -198,6 +593,7 @@
 
   function renderAccessiblePaths() {
     state.basePath = '';
+    closeSearchScopeSuggestMenu();
     searchBasePathMenu.innerHTML = '';
     updateBasePathTrigger('全部已授权目录');
     renderCurrentScope();
@@ -208,13 +604,14 @@
     searchBasePathMenu.innerHTML = '';
 
     const createOption = (label, value) => {
-      const option = document.createElement('button');
-      option.className = 'path-picker-option';
-      option.type = 'button';
+      const option = document.createElement('mdui-menu-item');
       option.textContent = label;
       option.dataset.path = value;
+      option.value = value;
+      option.toggleAttribute('selected', value === state.basePath);
       option.addEventListener('click', () => {
         state.basePath = value;
+        closeSearchScopeSuggestMenu();
         updateBasePathTrigger(label);
         renderCurrentScope();
         setBasePathMenuOpen(false);
@@ -230,14 +627,23 @@
 
   function setBasePathMenuOpen(open) {
     state.basePathMenuOpen = open;
-    searchBasePathMenu.hidden = !open;
+    if (open) {
+      positionFloatingMenu(searchBasePathMenu, searchBasePathTrigger, 280);
+    } else {
+      searchBasePathMenu.setAttribute('hidden', '');
+    }
     searchBasePathTrigger.classList.toggle('is-open', open);
+    updateBasePathTriggerState();
   }
 
   function updateBasePathTrigger(label) {
     searchBasePathLabel.textContent = label;
     searchBasePathTrigger.setAttribute('title', label);
     searchBasePathTrigger.setAttribute('aria-label', label);
+  }
+
+  function updateBasePathTriggerState() {
+    searchBasePathTrigger.setAttribute('aria-expanded', state.basePathMenuOpen ? 'true' : 'false');
   }
 
   function renderCurrentScope() {
@@ -277,6 +683,7 @@
       applyResultView({
         backend: shortCommandName(response.backend),
         total: Number(response.total || state.rawResults.length),
+        scopeLabel: response.basePath || '全部已授权目录',
       });
     } finally {
       searchSubmitButton.loading = false;
@@ -285,8 +692,7 @@
 
   function renderResultControls() {
     searchTypeFilterGroup.value = state.resultFilter;
-    searchSortSelect.value = state.resultSort;
-    searchSortDirection.value = state.resultDirection;
+    updateSortTriggerLabels();
   }
 
   function applyResultView(context = null) {
@@ -315,18 +721,15 @@
     }
 
     state.results = filtered;
-    if (!filtered.some((item) => item.path === state.selectedPath)) {
-      state.selectedPath = filtered[0]?.path || '';
-    }
     renderResultControls();
-    renderResults();
-    void renderSelection(filtered.find((item) => item.path === state.selectedPath) || null);
+    resetResultNavigation();
 
     if (context) {
       const total = context.total ?? state.rawResults.length;
       const filteredLabel =
         filtered.length === total ? `${total} 项结果` : `${total} 项结果，当前显示 ${filtered.length} 项`;
-      searchResultMeta.textContent = `${context.backend || '搜索'} 返回 ${filteredLabel}`;
+      const scopePrefix = context.scopeLabel ? `${context.scopeLabel} · ` : '';
+      searchResultMeta.textContent = `${scopePrefix}${context.backend || '搜索'} 返回 ${filteredLabel}`;
     } else if (!filtered.length && state.rawResults.length) {
       searchResultMeta.textContent = '当前筛选条件下没有结果';
     }
@@ -380,47 +783,59 @@
   }
 
   function renderResults() {
-    if (!state.results.length) {
+    if (!state.resultViewItems.length) {
       searchResultList.className = 'search-result-list list-empty';
-      searchResultList.textContent = '没有搜索结果';
+      searchResultList.textContent = state.resultViewStack.length ? '当前目录为空' : '没有搜索结果';
       return;
     }
 
     searchResultList.className = 'search-result-list';
-    searchResultList.innerHTML = state.results
+    searchResultList.innerHTML = state.resultViewItems
       .map((item) => {
         const selected = item.path === state.selectedPath ? ' is-selected' : '';
         const name = item.name || item.path;
-        const metaText = `${item.type === 'directory' ? '目录' : '文件'} / ${item.parent || ''}`;
+        const parentText = item.parent || '-';
+        const secondaryMeta =
+          item.type === 'directory'
+            ? `${formatCount(item)} / ${formatTime(item.mtime)}`
+            : `${typeText(item.type)} / ${formatTime(item.mtime)}`;
         return `
-          <button class="search-result-item${selected}" type="button" data-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">
-            <div class="search-result-main">
-              <div class="search-result-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
-              <div class="search-result-meta" title="${escapeHtml(metaText)}">${escapeHtml(metaText)}</div>
+          <button class="list-row interactive-row search-result-row${selected}" type="button" data-path="${escapeHtml(item.path)}" title="${escapeHtml(item.path)}">
+            <div class="list-main">
+              <div class="list-path" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+              <div class="list-size">${formatBytes(item.size || 0)}</div>
             </div>
-            <div class="search-result-side">
-              <div class="search-result-size">${formatBytes(item.size || 0)}</div>
-              <div class="search-result-date">${formatTime(item.mtime)}</div>
-            </div>
+            <div class="list-meta" title="${escapeHtml(parentText)}">${typeText(item.type)} / ${escapeHtml(parentText)}</div>
+            <div class="list-submeta">${escapeHtml(secondaryMeta)}</div>
           </button>
         `;
       })
       .join('');
 
     searchResultList.querySelectorAll('[data-path]').forEach((button) => {
-      button.addEventListener('click', () => {
-        state.selectedPath = button.dataset.path || '';
+      button.addEventListener('click', async () => {
+        const nextPath = button.dataset.path || '';
+        const nextItem = state.resultViewItems.find((item) => item.path === nextPath);
+        if (!nextItem) {
+          return;
+        }
+        if (nextItem.type === 'directory') {
+          await openResultDirectory(nextItem);
+          return;
+        }
+        state.selectedPath = nextPath;
+        state.selectedItem = nextItem;
         renderResults();
-        void renderSelection(state.results.find((item) => item.path === state.selectedPath) || null);
+        await renderSelection(nextItem);
       });
     });
   }
 
   async function renderSelection(item) {
+    state.selectedItem = item || null;
     if (!item) {
       searchSelection.className = 'selection-empty';
       searchSelection.textContent = '点击左侧结果查看详情';
-      renderChildren([]);
       return;
     }
 
@@ -428,79 +843,111 @@
     searchSelection.innerHTML = `
       <div class="selection-path" title="${escapeHtml(item.path)}">${escapeHtml(item.path)}</div>
       <div class="detail-grid">
-        <div class="detail-card">
+        <div class="detail-row">
           <span>类型</span>
-          <strong>${item.type === 'directory' ? '目录' : '文件'}</strong>
+          <strong title="${item.type === 'directory' ? '目录' : '文件'}">${item.type === 'directory' ? '目录' : '文件'}</strong>
         </div>
-        <div class="detail-card">
+        <div class="detail-row">
           <span>大小</span>
-          <strong>${formatBytes(item.size || 0)}</strong>
+          <strong title="${formatBytes(item.size || 0)}">${formatBytes(item.size || 0)}</strong>
         </div>
-        <div class="detail-card">
+        <div class="detail-row">
           <span>上级目录</span>
-          <strong>${escapeHtml(item.parent || '-')}</strong>
+          <strong title="${escapeHtml(item.parent || '-')}">${escapeHtml(item.parent || '-')}</strong>
         </div>
-        <div class="detail-card">
+        <div class="detail-row">
           <span>修改时间</span>
-          <strong>${formatTime(item.mtime)}</strong>
+          <strong title="${formatTime(item.mtime)}">${formatTime(item.mtime)}</strong>
         </div>
       </div>
     `;
-
-    if (item.type === 'directory') {
-      try {
-        const response = await fetchJson(`/api/search/children?path=${encodeURIComponent(item.path)}`);
-        state.selectedChildren = Array.isArray(response.items) ? response.items : [];
-        renderChildren(state.selectedChildren);
-      } catch (error) {
-        renderChildren([], error.message || '读取目录内容失败');
-      }
-      return;
-    }
-
-    state.selectedChildren = [];
-    renderChildren([]);
   }
 
-  function renderChildren(items, errorMessage = '') {
-    if (errorMessage) {
-      searchChildrenList.className = 'list-empty';
-      searchChildrenList.textContent = errorMessage;
+  function resetResultNavigation() {
+    state.resultViewStack = [];
+    state.resultViewItems = state.results.slice();
+    if (!state.resultViewItems.some((item) => item.path === state.selectedPath)) {
+      state.selectedPath = state.resultViewItems[0]?.path || '';
+    }
+    state.selectedItem =
+      state.resultViewItems.find((item) => item.path === state.selectedPath) || null;
+    renderResultBreadcrumb();
+    renderResults();
+    void renderSelection(state.selectedItem);
+  }
+
+  function renderResultBreadcrumb() {
+    const crumbs = [{ label: '搜索结果', level: -1 }];
+    state.resultViewStack.forEach((entry, index) => {
+      crumbs.push({ label: entry.label, level: index });
+    });
+
+    if (crumbs.length <= 1) {
+      searchResultBreadcrumb.hidden = true;
+      searchResultBreadcrumb.innerHTML = '';
       return;
     }
 
-    if (!items.length) {
-      searchChildrenList.className = 'list-empty';
-      searchChildrenList.textContent = state.selectedPath ? '当前未选中文件夹或目录为空' : '当前未选中文件夹';
-      return;
-    }
-
-    searchChildrenList.className = '';
-    searchChildrenList.innerHTML = items
+    searchResultBreadcrumb.hidden = false;
+    searchResultBreadcrumb.innerHTML = crumbs
       .map(
-        (item) => `
-          <button class="list-row interactive-row" type="button" data-path="${escapeHtml(item.path)}">
-            <div class="list-main">
-              <div class="list-path">${escapeHtml(item.name || item.path)}</div>
-              <div class="list-size">${formatBytes(item.size || 0)}</div>
-            </div>
-            <div class="list-meta">${typeText(item.type)} / ${formatCount(item)} / ${formatTime(item.mtime)}</div>
+        (crumb, index) => `
+          ${index > 0 ? '<span class="search-breadcrumb-separator">/</span>' : ''}
+          <button class="search-breadcrumb-button${index === crumbs.length - 1 ? ' is-current' : ''}" type="button" data-level="${crumb.level}">
+            ${escapeHtml(crumb.label)}
           </button>
         `,
       )
       .join('');
 
-    searchChildrenList.querySelectorAll('[data-path]').forEach((button) => {
+    searchResultBreadcrumb.querySelectorAll('[data-level]').forEach((button) => {
       button.addEventListener('click', () => {
-        const nextPath = button.dataset.path || '';
-        const nextItem = state.selectedChildren.find((item) => item.path === nextPath);
-        if (!nextItem) {
-          return;
-        }
-        state.selectedPath = nextPath;
-        void renderSelection(nextItem);
+        const level = Number(button.dataset.level);
+        navigateToBreadcrumb(level);
       });
     });
+  }
+
+  function navigateToBreadcrumb(level) {
+    if (level < 0) {
+      state.resultViewStack = [];
+      state.resultViewItems = state.results.slice();
+      state.selectedPath = '';
+      renderResultBreadcrumb();
+      renderResults();
+      void renderSelection(null);
+      return;
+    }
+
+    const target = state.resultViewStack[level];
+    if (!target) {
+      return;
+    }
+
+    state.resultViewStack = state.resultViewStack.slice(0, level + 1);
+    state.resultViewItems = target.items.slice();
+    state.selectedPath = '';
+    state.selectedItem = target.item || null;
+    renderResultBreadcrumb();
+    renderResults();
+    void renderSelection(target.item || null);
+  }
+
+  async function openResultDirectory(item) {
+    const response = await fetchJson(`/api/search/children?path=${encodeURIComponent(item.path)}`);
+    const children = Array.isArray(response.items) ? response.items : [];
+    state.resultViewStack.push({
+      label: item.name || item.path,
+      path: item.path,
+      items: children,
+      item,
+    });
+    state.resultViewItems = children;
+    state.selectedPath = '';
+    state.selectedItem = item;
+    renderResultBreadcrumb();
+    renderResults();
+    await renderSelection(item);
   }
 
   function typeText(type) {

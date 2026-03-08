@@ -1,7 +1,7 @@
 appname               = fntree
-version               = 0.1.71
+version               = 0.1.87
 display_name          = FN Tree
-desc                  = Disk usage analyzer for fnOS powered by gdu.
+desc                  = fnOS 磁盘占用分析与文件搜索工具，集成 treemap、索引搜索与实时搜索能力。
 arch                  = x86_64
 source                = thirdparty
 maintainer            = Codex

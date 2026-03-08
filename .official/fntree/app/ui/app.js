@@ -79,6 +79,8 @@ const VIEW_COPY = {
   },
 };
 
+setupAccessiblePathMenu();
+
 bootstrap().catch((error) => {
   showError(error.message || '初始化失败');
 });
@@ -172,6 +174,9 @@ treemapFilter?.addEventListener('change', () => {
 });
 
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && state.menuOpen) {
+    setPathMenuOpen(false);
+  }
   if (event.key === 'Escape' && state.historyOpen) {
     setHistoryOpen(false);
   }
@@ -181,8 +186,35 @@ heroModeGroup?.addEventListener('change', () => {
   setAppMode(heroModeGroup.value === 'search' ? 'search' : 'tree');
 });
 
-window.addEventListener('resize', throttle(renderTreemapOnly, 120));
+window.addEventListener(
+  'resize',
+  throttle(() => {
+    setPathMenuOpen(false);
+    renderTreemapOnly();
+  }, 120),
+);
 window.addEventListener('hashchange', syncModeFromLocation);
+window.addEventListener(
+  'scroll',
+  () => {
+    setPathMenuOpen(false);
+  },
+  true,
+);
+document.addEventListener(
+  'wheel',
+  () => {
+    setPathMenuOpen(false);
+  },
+  { capture: true, passive: true },
+);
+document.addEventListener(
+  'touchmove',
+  () => {
+    setPathMenuOpen(false);
+  },
+  { capture: true, passive: true },
+);
 treemapView.addEventListener(
   'wheel',
   (event) => {
@@ -315,8 +347,13 @@ function renderAccessiblePaths() {
 
 function setPathMenuOpen(open) {
   state.menuOpen = open;
-  accessiblePathMenu.hidden = !open;
+  if (open) {
+    positionAccessiblePathMenu();
+  } else {
+    accessiblePathMenu.setAttribute('hidden', '');
+  }
   accessiblePathTrigger.classList.toggle('is-open', open);
+  accessiblePathTrigger.setAttribute('aria-expanded', open ? 'true' : 'false');
 }
 
 function updateAccessiblePathTrigger(label) {
@@ -334,20 +371,62 @@ function ensureAccessiblePathMenu() {
 
   accessiblePathMenu.innerHTML = '';
   state.accessiblePaths.forEach((item) => {
-    const option = document.createElement('button');
-    option.className = 'path-picker-option';
-    option.type = 'button';
+    const option = document.createElement('mdui-menu-item');
     option.textContent = item;
     option.dataset.path = item;
+    option.value = item;
+    option.toggleAttribute('selected', item === pathInput.value);
     option.addEventListener('click', () => {
       pathInput.value = item;
       updateAccessiblePathTrigger(item);
+      syncAccessiblePathMenuSelection();
       setPathMenuOpen(false);
     });
     accessiblePathMenu.append(option);
   });
 
   state.pathMenuRendered = true;
+}
+
+function setupAccessiblePathMenu() {
+  document.body.append(accessiblePathMenu);
+  accessiblePathMenu.setAttribute('hidden', '');
+  accessiblePathTrigger.setAttribute('aria-expanded', 'false');
+}
+
+function positionAccessiblePathMenu() {
+  if (!(accessiblePathTrigger instanceof HTMLElement)) {
+    return;
+  }
+
+  const triggerRect = accessiblePathTrigger.getBoundingClientRect();
+  const viewportWidth = document.documentElement.clientWidth;
+  const gutter = 12;
+  const gap = 6;
+  const triggerWidth = Math.ceil(triggerRect.width);
+  const minimumWidth = 280;
+
+  syncAccessiblePathMenuSelection();
+
+  accessiblePathMenu.style.visibility = 'hidden';
+  accessiblePathMenu.removeAttribute('hidden');
+
+  const measuredWidth = Math.ceil(accessiblePathMenu.offsetWidth);
+  const menuWidth = Math.max(minimumWidth, triggerWidth, measuredWidth);
+  const maxLeft = Math.max(gutter, viewportWidth - menuWidth - gutter);
+  const left = Math.min(Math.max(gutter, Math.round(triggerRect.left)), maxLeft);
+
+  accessiblePathMenu.style.left = `${left}px`;
+  accessiblePathMenu.style.top = `${Math.round(triggerRect.bottom + gap)}px`;
+  accessiblePathMenu.style.minWidth = `${Math.max(minimumWidth, triggerWidth)}px`;
+  accessiblePathMenu.style.maxWidth = `${Math.max(minimumWidth, triggerWidth)}px`;
+  accessiblePathMenu.style.visibility = '';
+}
+
+function syncAccessiblePathMenuSelection() {
+  accessiblePathMenu.querySelectorAll('mdui-menu-item').forEach((item) => {
+    item.toggleAttribute('selected', item.dataset.path === pathInput.value);
+  });
 }
 
 function setHistoryOpen(open) {
