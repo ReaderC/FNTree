@@ -76,6 +76,7 @@
 
   const state = {
     theme: 'cinnamon',
+    colorScheme: 'auto',
     mode: 'quick',
     accessiblePaths: [],
     basePath: '',
@@ -565,18 +566,21 @@
   async function bootstrap() {
     const cachedSettings = readSettingsSnapshot();
     if (cachedSettings) {
-      applyTheme(cachedSettings.theme || 'cinnamon');
+      applyTheme(cachedSettings.theme || 'cinnamon', {
+        colorScheme: cachedSettings.colorScheme || 'auto',
+      });
     }
 
     const settings = await fetchJson('/api/settings');
     state.theme = settings.theme || 'cinnamon';
+    state.colorScheme = settings.colorScheme || 'auto';
     state.accessiblePaths = Array.isArray(settings.accessiblePaths) ? settings.accessiblePaths : [];
     state.searchStatus = settings.searchStatus || null;
     state.searchOptions = {
       ...state.searchOptions,
       ...(settings.searchOptions || {}),
     };
-    applyTheme(state.theme);
+    applyTheme(state.theme, { colorScheme: state.colorScheme });
     writeSettingsSnapshot(settings);
 
     await refreshSearchStatus();

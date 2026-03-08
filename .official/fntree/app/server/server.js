@@ -134,6 +134,7 @@ function defaultSettings() {
   return {
     accessiblePaths: [],
     theme: 'cinnamon',
+    colorScheme: 'auto',
     scanOptions: {
       scanMode: 'disk-usage',
       ignoreHidden: true,
@@ -159,11 +160,15 @@ function normalizeSettings(settings) {
   const searchOptions =
     settings && typeof settings.searchOptions === 'object' ? settings.searchOptions : {};
   const allowedThemes = new Set(['cinnamon', 'slate', 'forest', 'ocean']);
+  const allowedColorSchemes = new Set(['light', 'dark', 'auto']);
   return {
     accessiblePaths: Array.isArray(settings?.accessiblePaths)
       ? settings.accessiblePaths.filter((item) => typeof item === 'string' && item.trim())
       : defaults.accessiblePaths,
     theme: allowedThemes.has(settings?.theme) ? settings.theme : defaults.theme,
+    colorScheme: allowedColorSchemes.has(settings?.colorScheme)
+      ? settings.colorScheme
+      : defaults.colorScheme,
     scanOptions: {
       scanMode: scanOptions.scanMode === 'apparent-size' ? 'apparent-size' : 'disk-usage',
       ignoreHidden: toBoolean(scanOptions.ignoreHidden, defaults.scanOptions.ignoreHidden),
@@ -306,6 +311,7 @@ async function handleApi(req, res, url) {
     const saved = writeSettings({
       accessiblePaths: current.accessiblePaths,
       theme: payload?.theme || current.theme,
+      colorScheme: payload?.colorScheme || current.colorScheme,
       scanOptions: {
         ...current.scanOptions,
         ...incomingScanOptions,
