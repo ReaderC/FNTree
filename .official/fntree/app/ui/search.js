@@ -479,12 +479,12 @@
     searchChildrenList.innerHTML = items
       .map(
         (item) => `
-          <button class="list-row" type="button" data-path="${escapeHtml(item.path)}">
-            <div>
-              <strong>${escapeHtml(item.name || item.path)}</strong>
-              <div class="list-meta">${item.type === 'directory' ? '目录' : '文件'} / ${formatTime(item.mtime)}</div>
+          <button class="list-row interactive-row" type="button" data-path="${escapeHtml(item.path)}">
+            <div class="list-main">
+              <div class="list-path">${escapeHtml(item.name || item.path)}</div>
+              <div class="list-size">${formatBytes(item.size || 0)}</div>
             </div>
-            <strong>${formatBytes(item.size || 0)}</strong>
+            <div class="list-meta">${typeText(item.type)} / ${formatCount(item)} / ${formatTime(item.mtime)}</div>
           </button>
         `,
       )
@@ -501,6 +501,17 @@
         void renderSelection(nextItem);
       });
     });
+  }
+
+  function typeText(type) {
+    return type === 'directory' ? '目录' : '文件';
+  }
+
+  function formatCount(item) {
+    if (item.type !== 'directory') {
+      return '1 项';
+    }
+    return `${Number(item.childCount || 0)} 项`;
   }
 
   async function fetchJson(url, options) {

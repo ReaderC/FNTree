@@ -317,21 +317,27 @@
                   </mdui-segmented-button-group>
                   <div class="search-sort-group">
                     <label class="sr-only" for="searchSortSelect">搜索结果排序项</label>
-                    <select id="searchSortSelect" class="theme-select search-sort-select" aria-label="搜索结果排序项">
-                      <option value="relevance">按匹配顺序</option>
-                      <option value="size">按大小</option>
-                      <option value="mtime">按时间</option>
-                      <option value="name">按名称</option>
-                    </select>
+                    <mdui-select
+                      id="searchSortSelect"
+                      class="search-sort-select"
+                      value="relevance"
+                      aria-label="搜索结果排序项"
+                    >
+                      <mdui-menu-item value="relevance">按匹配顺序</mdui-menu-item>
+                      <mdui-menu-item value="size">按大小</mdui-menu-item>
+                      <mdui-menu-item value="mtime">按时间</mdui-menu-item>
+                      <mdui-menu-item value="name">按名称</mdui-menu-item>
+                    </mdui-select>
                     <label class="sr-only" for="searchSortDirection">搜索结果排序方向</label>
-                    <select
+                    <mdui-select
                       id="searchSortDirection"
-                      class="theme-select search-sort-direction"
+                      class="search-sort-direction"
+                      value="desc"
                       aria-label="搜索结果排序方向"
                     >
-                      <option value="desc">降序</option>
-                      <option value="asc">升序</option>
-                    </select>
+                      <mdui-menu-item value="desc">降序</mdui-menu-item>
+                      <mdui-menu-item value="asc">升序</mdui-menu-item>
+                    </mdui-select>
                   </div>
                 </div>
                 <mdui-button id="searchResetButton" variant="tonal">

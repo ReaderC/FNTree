@@ -36,6 +36,8 @@ mdui-button-icon:not(:defined),
 mdui-segmented-button-group:not(:defined),
 mdui-segmented-button:not(:defined),
 mdui-switch:not(:defined),
+mdui-select:not(:defined),
+mdui-menu-item:not(:defined),
 mdui-navigation-rail:not(:defined),
 mdui-navigation-rail-item:not(:defined) {
   visibility: hidden;
@@ -969,12 +971,14 @@ h1 {
 }
 
 #childrenList,
+#searchChildrenList,
 #recentTasks {
   overflow: auto;
   padding-right: 6px;
 }
 
-#childrenList {
+#childrenList,
+#searchChildrenList {
   flex: 1;
   min-height: 0;
   border-top: 1px solid var(--panel-border);
@@ -1283,6 +1287,13 @@ h1 {
   min-height: min(72vh, 760px);
 }
 
+.search-detail-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .search-control-head,
 .search-results-header,
 .search-action-row {
@@ -1388,31 +1399,27 @@ h1 {
 }
 
 .search-sort-select {
-  width: 180px;
+  width: 190px;
 }
 
 .search-sort-direction {
-  width: 108px;
+  width: 124px;
 }
 
 .search-sort-select,
 .search-sort-direction {
-  min-height: 40px;
-  padding: 8px 14px;
+  --mdui-color-primary: var(--accent-rgb);
+  --shape-corner: 999px;
+  min-width: 0;
+}
+
+.search-sort-select::part(control),
+.search-sort-direction::part(control) {
+  min-height: 42px;
   border-radius: 999px;
   background: #fffdf9;
   border: 1px solid rgba(var(--accent-rgb), 0.14);
-  color: var(--text-main);
-  appearance: none;
-  background-image:
-    linear-gradient(45deg, transparent 50%, var(--accent) 50%),
-    linear-gradient(135deg, var(--accent) 50%, transparent 50%);
-  background-position:
-    calc(100% - 18px) calc(50% - 2px),
-    calc(100% - 12px) calc(50% - 2px);
-  background-size: 6px 6px, 6px 6px;
-  background-repeat: no-repeat;
-  padding-right: 34px;
+  box-shadow: none;
 }
 
 .search-mode-inline {
@@ -1643,6 +1650,20 @@ h1 {
 
 .search-children-header {
   margin-top: 12px;
+}
+
+#searchChildrenList .list-path {
+  font-weight: 700;
+}
+
+#searchChildrenList .list-meta {
+  margin-top: 6px;
+}
+
+#searchChildrenList {
+  flex: 1;
+  min-height: 0;
+  max-height: 100%;
 }
 
 .selection-path {
