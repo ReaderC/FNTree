@@ -65,6 +65,16 @@
                 </section>
 
                 <section class="settings-card settings-card-stack">
+                  <span class="settings-label">明暗模式</span>
+                  <span class="settings-help">跟随系统，或固定为浅色 / 深色。</span>
+                  <mdui-segmented-button-group id="settingColorScheme" selects="single" value="auto">
+                    <mdui-segmented-button value="auto">跟随系统</mdui-segmented-button>
+                    <mdui-segmented-button value="light">浅色</mdui-segmented-button>
+                    <mdui-segmented-button value="dark">深色</mdui-segmented-button>
+                  </mdui-segmented-button-group>
+                </section>
+
+                <section class="settings-card settings-card-stack">
                   <span class="settings-label">统计方式</span>
                   <span class="settings-help">默认使用磁盘占用。切换为表观大小后，会更接近文件名义大小。</span>
                   <mdui-segmented-button-group id="settingScanMode" selects="single" value="disk-usage">

@@ -1,5 +1,7 @@
 ﻿const themeRuntime = window.FNTreeTheme || {};
 const THEME_PRESETS = themeRuntime.presets || {};
+const normalizeColorScheme = (value) =>
+  themeRuntime.normalizeColorScheme ? themeRuntime.normalizeColorScheme(value) : 'auto';
 const applyTheme = (themeName, options) =>
   themeRuntime.applyTheme ? themeRuntime.applyTheme(themeName, options) : themeName;
 const readCachedSettings = () =>
@@ -11,6 +13,7 @@ const writeCachedSettings = (settings) => {
 };
 
 const settingTheme = document.getElementById('settingTheme');
+const settingColorScheme = document.getElementById('settingColorScheme');
 const settingScanMode = document.getElementById('settingScanMode');
 const settingsRailScan = document.getElementById('settingsRailScan');
 const settingsRailSearch = document.getElementById('settingsRailSearch');
@@ -41,6 +44,7 @@ const settingsState = {
   section: 'scan',
   returnTarget: 'tree',
   theme: 'cinnamon',
+  colorScheme: 'auto',
   scanMode: 'disk-usage',
   topLimit: 30,
   treemapMaxVisible: 24,
@@ -70,7 +74,13 @@ saveSettingsButton.addEventListener('click', () => {
 settingTheme.addEventListener('change', () => {
   settingsState.theme = settingTheme.value || 'cinnamon';
   renderThemeButtons();
-  applyTheme(settingsState.theme, { persist: false });
+  applyTheme(settingsState.theme, { persist: false, colorScheme: settingsState.colorScheme });
+});
+
+settingColorScheme.addEventListener('change', () => {
+  settingsState.colorScheme = normalizeColorScheme(settingColorScheme.value);
+  renderColorSchemeButtons();
+  applyTheme(settingsState.theme, { persist: false, colorScheme: settingsState.colorScheme });
 });
 
 settingScanMode.addEventListener('change', () => {
@@ -206,6 +216,7 @@ function syncBackButtons() {
 function hydrateSettings(settings) {
   const scanOptions = settings.scanOptions || {};
   settingsState.theme = settings.theme || 'cinnamon';
+  settingsState.colorScheme = normalizeColorScheme(settings.colorScheme);
   settingsState.scanMode = scanOptions.scanMode || 'disk-usage';
   settingsState.topLimit = Number(scanOptions.topLimit || 30);
   settingsState.treemapMaxVisible = Number(scanOptions.treemapMaxVisible || 24);
@@ -221,12 +232,13 @@ function hydrateSettings(settings) {
   settingConcurrent.checked = !Boolean(scanOptions.sequential);
 
   renderThemeButtons();
+  renderColorSchemeButtons();
   renderScanModeButtons();
   renderTopLimit();
   renderTreemapVisible();
   renderSearchIndexInterval();
   renderIndexedPaths();
-  applyTheme(settingsState.theme);
+  applyTheme(settingsState.theme, { colorScheme: settingsState.colorScheme });
   writeCachedSettings(settings);
 }
 
@@ -258,6 +270,10 @@ async function hydrateSearchIndexStatus() {
 
 function renderThemeButtons() {
   settingTheme.value = settingsState.theme;
+}
+
+function renderColorSchemeButtons() {
+  settingColorScheme.value = settingsState.colorScheme;
 }
 
 function renderScanModeButtons() {
@@ -356,6 +372,7 @@ async function saveSettings() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         theme: settingsState.theme || 'cinnamon',
+        colorScheme: settingsState.colorScheme || 'auto',
         scanOptions: {
           scanMode: settingsState.scanMode || 'disk-usage',
           ignoreHidden: Boolean(settingIgnoreHidden.checked),
@@ -373,7 +390,13 @@ async function saveSettings() {
     });
 
     hydrateSettings(settings);
-    settingsStatus.textContent = `设置已保存，当前主题：${THEME_PRESETS[settingsState.theme]?.label || '暖棕'}`;
+    const schemeLabel =
+      settingsState.colorScheme === 'dark'
+        ? '深色'
+        : settingsState.colorScheme === 'light'
+          ? '浅色'
+          : '跟随系统';
+    settingsStatus.textContent = `设置已保存，当前主题：${THEME_PRESETS[settingsState.theme]?.label || '暖棕'} / ${schemeLabel}`;
     showMessage('设置已保存');
   } finally {
     saveSettingsButton.disabled = false;

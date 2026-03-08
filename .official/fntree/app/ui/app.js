@@ -1932,7 +1932,7 @@ function hydrateDashboard({ settings, health, tasks }) {
     state.accessiblePaths = settings.accessiblePaths || [];
     state.searchStatus = settings.searchStatus || state.searchStatus;
     state.treemapMaxVisible = Number(settings.scanOptions?.treemapMaxVisible || 24);
-    applyTheme(settings.theme || 'cinnamon');
+    applyTheme(settings.theme || 'cinnamon', { colorScheme: settings.colorScheme || 'auto' });
     renderAccessiblePaths();
     renderScanOptions(settings.scanOptions || {});
     window.__fntreeSettings = settings;

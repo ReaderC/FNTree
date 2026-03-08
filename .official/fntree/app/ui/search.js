@@ -8,6 +8,7 @@
   const searchQuery = document.getElementById('searchQuery');
   const searchSubmitButton = document.getElementById('searchSubmitButton');
   const searchResetButton = document.getElementById('searchResetButton');
+  const searchResetAnchor = document.querySelector('.search-reset-anchor');
   const searchCurrentScope = document.getElementById('searchCurrentScope');
   const searchSummary = document.getElementById('searchSummary');
   const searchResultMeta = document.getElementById('searchResultMeta');
@@ -31,6 +32,7 @@
     document.querySelectorAll('#searchSortDirectionMenu mdui-menu-item'),
   );
   const searchScopeSuggestMenu = document.createElement('mdui-menu');
+  const searchResetTooltip = document.createElement('div');
   const searchSortMenuAnchors = new Map([
     [searchSortMenu, searchSortTrigger],
     [searchSortDirectionMenu, searchSortDirectionTrigger],
@@ -45,6 +47,7 @@
     !searchQuery ||
     !searchSubmitButton ||
     !searchResetButton ||
+    !searchResetAnchor ||
     !searchCurrentScope ||
     !searchSummary ||
     !searchResultMeta ||
@@ -76,6 +79,7 @@
 
   const state = {
     theme: 'cinnamon',
+    colorScheme: 'auto',
     mode: 'quick',
     accessiblePaths: [],
     basePath: '',
@@ -100,6 +104,7 @@
   setupSearchScopeSuggestMenu();
   setupSearchBasePathMenu();
   setupSearchSortMenus();
+  setupSearchResetTooltip();
 
   bootstrap().catch((error) => {
     showError(error.message || '初始化搜索页失败');
@@ -141,6 +146,7 @@
   });
 
   searchResetButton.addEventListener('click', () => {
+    closeSearchResetTooltip();
     searchQuery.value = '';
     closeSearchScopeSuggestMenu();
     state.rawResults = [];
@@ -219,6 +225,20 @@
     document.body.append(searchScopeSuggestMenu);
   }
 
+  function setupSearchResetTooltip() {
+    searchResetTooltip.className = 'search-reset-floating-tooltip';
+    searchResetTooltip.textContent = '清空结果';
+    searchResetTooltip.setAttribute('hidden', '');
+    document.body.append(searchResetTooltip);
+
+    [searchResetAnchor, searchResetButton].forEach((element) => {
+      element.addEventListener('mouseenter', openSearchResetTooltip);
+      element.addEventListener('focus', openSearchResetTooltip);
+      element.addEventListener('mouseleave', closeSearchResetTooltip);
+      element.addEventListener('blur', closeSearchResetTooltip);
+    });
+  }
+
   function setupSearchBasePathMenu() {
     document.body.append(searchBasePathMenu);
     searchBasePathMenu.setAttribute('hidden', '');
@@ -251,9 +271,36 @@
     menu.style.visibility = '';
   }
 
+  function openSearchResetTooltip() {
+    const triggerRect = searchResetAnchor.getBoundingClientRect();
+    const viewportWidth = document.documentElement.clientWidth;
+    const gutter = 12;
+    const gap = 8;
+
+    searchResetTooltip.style.visibility = 'hidden';
+    searchResetTooltip.removeAttribute('hidden');
+
+    const tooltipWidth = Math.ceil(searchResetTooltip.offsetWidth);
+    const tooltipHeight = Math.ceil(searchResetTooltip.offsetHeight);
+    const centeredLeft = Math.round(triggerRect.left + triggerRect.width / 2 - tooltipWidth / 2);
+    const left = Math.min(
+      Math.max(gutter, centeredLeft),
+      Math.max(gutter, viewportWidth - tooltipWidth - gutter),
+    );
+    const top = Math.max(gutter, Math.round(triggerRect.top - tooltipHeight - gap));
+
+    searchResetTooltip.style.left = `${left}px`;
+    searchResetTooltip.style.top = `${top}px`;
+    searchResetTooltip.style.visibility = '';
+  }
+
   function closeSearchScopeSuggestMenu() {
     state.scopeSuggestOpen = false;
     searchScopeSuggestMenu.setAttribute('hidden', '');
+  }
+
+  function closeSearchResetTooltip() {
+    searchResetTooltip.setAttribute('hidden', '');
   }
 
   function openSearchScopeSuggestMenu() {
@@ -485,6 +532,7 @@
       setBasePathMenuOpen(false);
       closeSearchSortDropdowns();
       closeSearchScopeSuggestMenu();
+      closeSearchResetTooltip();
     },
     true,
   );
@@ -495,6 +543,7 @@
       setBasePathMenuOpen(false);
       closeSearchSortDropdowns();
       closeSearchScopeSuggestMenu();
+      closeSearchResetTooltip();
     },
     { capture: true, passive: true },
   );
@@ -505,6 +554,7 @@
       setBasePathMenuOpen(false);
       closeSearchSortDropdowns();
       closeSearchScopeSuggestMenu();
+      closeSearchResetTooltip();
     },
     { capture: true, passive: true },
   );
@@ -513,6 +563,7 @@
     setBasePathMenuOpen(false);
     closeSearchSortDropdowns();
     closeSearchScopeSuggestMenu();
+    closeSearchResetTooltip();
   });
 
   document.addEventListener('keydown', (event) => {
@@ -520,6 +571,7 @@
       setBasePathMenuOpen(false);
       closeSearchSortDropdowns();
       closeSearchScopeSuggestMenu();
+      closeSearchResetTooltip();
     }
   });
 
@@ -565,18 +617,21 @@
   async function bootstrap() {
     const cachedSettings = readSettingsSnapshot();
     if (cachedSettings) {
-      applyTheme(cachedSettings.theme || 'cinnamon');
+      applyTheme(cachedSettings.theme || 'cinnamon', {
+        colorScheme: cachedSettings.colorScheme || 'auto',
+      });
     }
 
     const settings = await fetchJson('/api/settings');
     state.theme = settings.theme || 'cinnamon';
+    state.colorScheme = settings.colorScheme || 'auto';
     state.accessiblePaths = Array.isArray(settings.accessiblePaths) ? settings.accessiblePaths : [];
     state.searchStatus = settings.searchStatus || null;
     state.searchOptions = {
       ...state.searchOptions,
       ...(settings.searchOptions || {}),
     };
-    applyTheme(state.theme);
+    applyTheme(state.theme, { colorScheme: state.colorScheme });
     writeSettingsSnapshot(settings);
 
     await refreshSearchStatus();
