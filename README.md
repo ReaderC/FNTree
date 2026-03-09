@@ -165,3 +165,11 @@ Set-Location .official/fntree
 - `.official/fntree/app/ui/settings.js`
 - `.official/fntree/app/ui/theme.js`
 - `.official/fntree/app/server/server.js`
+
+## 许可证
+
+- 项目自身代码：`AGPL-3.0-or-later`
+- 第三方组件说明：见 `THIRD_PARTY_NOTICES.md`
+- 当前仓库内使用的后端工具：
+  - `gdu`：MIT
+  - `fd`：MIT OR Apache-2.0
