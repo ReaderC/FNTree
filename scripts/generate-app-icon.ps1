@@ -148,7 +148,8 @@ function Write-AppIcon {
   $bitmap.Dispose()
 }
 
-$imagesDir = 'F:\FNTree-\.official\fntree\app\ui\images'
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$imagesDir = Join-Path $repoRoot '.official\fntree\app\ui\images'
 New-Item -ItemType Directory -Force -Path $imagesDir | Out-Null
 
 Write-AppIcon -Size 64 -OutputPath (Join-Path $imagesDir 'icon_64.png')
