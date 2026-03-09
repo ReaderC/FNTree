@@ -2,6 +2,10 @@
 
 fnOS 上的磁盘占用分析与文件搜索应用，提供 Tree、Treemap、Search 和统一设置页，面向 NAS 场景下的空间排查与文件定位。
 
+## 🤖 关于本项目
+
+本项目的**所有代码均由 AI（Artificial Intelligence）生成**，项目作者本人不具备相关编程知识，对代码内容不作任何技术层面的解释或保证。如果你遇到问题或有改进想法，欢迎自行修改、Fork 或提交 Issue。
+
 ## 功能概览
 
 - Tree 页面：选择已授权目录执行扫描，查看目录层级、详情卡片和 Treemap。
@@ -21,6 +25,17 @@ fnOS 上的磁盘占用分析与文件搜索应用，提供 Tree、Treemap、Sea
 ### Treemap Detail
 
 ![Treemap 详情](docs/screenshots/treemap-detail.png)
+
+### Search
+
+![Search 首页](docs/screenshots/search-home.png)
+
+### Search Detail
+
+![Search 详情](docs/screenshots/search-detail.png)
+
+### Setting Page
+![Setting 页面](docs/screenshots/setting.png)
 
 ## 项目结构
 
@@ -138,12 +153,6 @@ Set-Location .official/fntree
 - 搜索索引周期
 - 参与索引的授权目录
 
-## 仓库说明
-
-- 仓库以应用源码为主，不包含正式发布产物。
-- `docs/` 中保留截图和设计资料。
-- `scripts/` 中保留辅助脚本。
-- 临时验证目录、安装包和构建产物已在 `.gitignore` 中排除。
 
 ## 维护建议
 
