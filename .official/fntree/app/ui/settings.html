@@ -30,7 +30,16 @@
 
         <div class="settings-layout">
           <mdui-navigation-rail id="settingsRail" class="settings-rail">
-            <mdui-navigation-rail-item id="settingsRailScan" value="scan" active>
+            <mdui-navigation-rail-item id="settingsRailTheme" value="theme" active>
+              <svg slot="icon" class="rail-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  fill="currentColor"
+                  d="M12 3a7 7 0 0 0 0 14a7 7 0 1 0 0-14m0 2a5 5 0 0 1 0 10a5 5 0 0 1 0-10m0-3h2v3h-2zm0 17h2v3h-2zM2 11h3v2H2zm17 0h3v2h-3zM4.93 6.34l1.41-1.41l2.12 2.12l-1.41 1.41zm10.61 10.61l1.41-1.41l2.12 2.12l-1.41 1.41zM15.54 7.05l2.12-2.12l1.41 1.41l-2.12 2.12zM4.93 17.66l2.12-2.12l1.41 1.41l-2.12 2.12z"
+                />
+              </svg>
+              主题设置
+            </mdui-navigation-rail-item>
+            <mdui-navigation-rail-item id="settingsRailScan" value="scan">
               <svg slot="icon" class="rail-inline-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   fill="currentColor"
@@ -51,7 +60,7 @@
           </mdui-navigation-rail>
 
           <div class="settings-content">
-            <section id="settingsSectionScan" class="settings-section is-active">
+            <section id="settingsSectionTheme" class="settings-section is-active">
               <div class="settings-page-grid">
                 <section class="settings-card settings-card-stack">
                   <span class="settings-label">主题色</span>
@@ -73,7 +82,11 @@
                     <mdui-segmented-button value="dark">深色</mdui-segmented-button>
                   </mdui-segmented-button-group>
                 </section>
+              </div>
+            </section>
 
+            <section id="settingsSectionScan" class="settings-section">
+              <div class="settings-page-grid">
                 <section class="settings-card settings-card-stack">
                   <span class="settings-label">统计方式</span>
                   <span class="settings-help">默认使用磁盘占用。切换为表观大小后，会更接近文件名义大小。</span>

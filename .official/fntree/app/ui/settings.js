@@ -15,8 +15,10 @@ const writeCachedSettings = (settings) => {
 const settingTheme = document.getElementById('settingTheme');
 const settingColorScheme = document.getElementById('settingColorScheme');
 const settingScanMode = document.getElementById('settingScanMode');
+const settingsRailTheme = document.getElementById('settingsRailTheme');
 const settingsRailScan = document.getElementById('settingsRailScan');
 const settingsRailSearch = document.getElementById('settingsRailSearch');
+const settingsSectionTheme = document.getElementById('settingsSectionTheme');
 const settingsSectionScan = document.getElementById('settingsSectionScan');
 const settingsSectionSearch = document.getElementById('settingsSectionSearch');
 const settingsBackButton = document.getElementById('settingsBackButton');
@@ -41,7 +43,7 @@ const saveSettingsButton = document.getElementById('saveSettingsButton');
 const settingsStatus = document.getElementById('settingsStatus');
 
 const settingsState = {
-  section: 'scan',
+  section: 'theme',
   returnTarget: 'tree',
   theme: 'cinnamon',
   colorScheme: 'auto',
@@ -55,6 +57,10 @@ const settingsState = {
 
 bootstrap().catch((error) => {
   showError(error.message || '初始化设置页失败');
+});
+
+settingsRailTheme?.addEventListener('click', () => {
+  setActiveSection('theme', { updateUrl: true });
 });
 
 settingsRailScan?.addEventListener('click', () => {
@@ -159,7 +165,8 @@ function hydrateNavigationState() {
   const section = params.get('section');
   const returnTarget = params.get('return');
 
-  settingsState.section = section === 'search' ? 'search' : 'scan';
+  settingsState.section =
+    section === 'search' ? 'search' : section === 'scan' ? 'scan' : 'theme';
   settingsState.returnTarget = returnTarget === 'search' ? 'search' : 'tree';
 
   setActiveSection(settingsState.section, { updateUrl: false });
@@ -167,11 +174,14 @@ function hydrateNavigationState() {
 }
 
 function setActiveSection(section, options = {}) {
-  settingsState.section = section === 'search' ? 'search' : 'scan';
+  settingsState.section =
+    section === 'search' ? 'search' : section === 'scan' ? 'scan' : 'theme';
 
+  settingsSectionTheme?.classList.toggle('is-active', settingsState.section === 'theme');
   settingsSectionScan?.classList.toggle('is-active', settingsState.section === 'scan');
   settingsSectionSearch?.classList.toggle('is-active', settingsState.section === 'search');
 
+  toggleRailItem(settingsRailTheme, settingsState.section === 'theme');
   toggleRailItem(settingsRailScan, settingsState.section === 'scan');
   toggleRailItem(settingsRailSearch, settingsState.section === 'search');
 
@@ -179,7 +189,9 @@ function setActiveSection(section, options = {}) {
     settingsIntro.textContent =
       settingsState.section === 'search'
         ? '集中调整搜索索引、快速搜索和实时搜索的默认行为。'
-        : '集中调整扫描方式、Treemap 和分析默认行为。';
+        : settingsState.section === 'scan'
+          ? '集中调整扫描方式、Treemap 和分析默认行为。'
+          : '集中调整主题色、明暗模式和整体视觉风格。';
   }
 
   if (options.updateUrl !== false) {

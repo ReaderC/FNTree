@@ -1,12 +1,12 @@
 # FN Tree
 
-fnOS 上的磁盘占用分析与文件搜索应用。项目提供 Tree、Treemap、Search 和统一设置页，面向 NAS 场景下的空间排查和文件定位。
+fnOS 上的磁盘占用分析与文件搜索应用，提供 Tree、Treemap、Search 和统一设置页，面向 NAS 场景下的空间排查与文件定位。
 
 ## 功能概览
 
 - Tree 页面：选择已授权目录执行扫描，查看目录层级、详情卡片和 Treemap。
 - Search 页面：在已授权目录内执行快速搜索和实时搜索。
-- Settings 页面：统一管理扫描行为、搜索索引、主题色和明暗模式。
+- Settings 页面：拆分为主题设置、扫描设置、搜索设置三个页面。
 - 深色模式：支持浅色、深色、跟随系统。
 - 搜索范围前缀：
   - `@photos cat`：在当前已选授权目录的 `photos` 子目录内搜索 `cat`
@@ -22,10 +22,6 @@ fnOS 上的磁盘占用分析与文件搜索应用。项目提供 Tree、Treemap
 
 ![Treemap 详情](docs/screenshots/treemap-detail.png)
 
-### Search
-
-![Search 页面](docs/screenshots/search-home.png)
-
 ## 项目结构
 
 ```text
@@ -33,11 +29,14 @@ FNTree-
 |- .official/
 |  \- fntree/
 |     |- app/
+|     |  |- bin/           # gdu / fd 等二进制
 |     |  |- server/        # Node.js 后端
-|     |  |- ui/            # 前端页面、脚本、样式
-|     |  \- bin/           # gdu / fd 等二进制
+|     |  \- ui/            # 前端页面、脚本、样式
+|     |- cmd/              # fnOS 生命周期脚本
+|     |- config/           # 权限与资源声明
+|     |- wizard/           # 安装向导
 |     \- manifest          # fnpack 清单
-|- docs/                   # 截图与补充资料
+|- docs/                   # 截图与设计资料
 |- scripts/                # 辅助脚本
 |- .gitignore
 \- README.md
@@ -77,40 +76,40 @@ FNTree-
 实际应用源码目录：
 
 ```text
-F:\FNTree-\.official\fntree
+.official/fntree
 ```
 
 常改位置：
 
-- 前端：`F:\FNTree-\.official\fntree\app\ui`
-- 后端：`F:\FNTree-\.official\fntree\app\server`
-- 版本清单：`F:\FNTree-\.official\fntree\manifest`
+- 前端：`.official/fntree/app/ui`
+- 后端：`.official/fntree/app/server`
+- 版本清单：`.official/fntree/manifest`
 
 建议流程：
 
 1. 修改前端或后端代码。
 2. 对相关脚本执行 `node --check`。
-3. 进入 `F:\FNTree-\.official\fntree` 执行打包。
+3. 进入 `.official/fntree` 执行打包。
 4. 安装前解包核对包内文件。
 
 ## 打包
 
 ```powershell
-Set-Location F:\FNTree-\.official\fntree
-& F:\FNTree-\.tooling\fnpack.exe build
+Set-Location .official/fntree
+& ../../.tooling/fnpack.exe build
 ```
 
 输出文件：
 
 ```text
-F:\FNTree-\.official\fntree\fntree.fpk
+.official/fntree/fntree.fpk
 ```
 
 注意：
 
 - fnOS 只允许安装更高版本号的程序。
-- 每次生成可安装包前，都需要先递增 `.official/fntree/manifest` 中的 `version`。
-- 仓库根目录下的 `fntree_*.fpk` 仅用于本地安装测试，不应提交到 GitHub。
+- 生成可安装包前，需要先递增 `.official/fntree/manifest` 中的 `version`。
+- 根目录下的 `fntree_*.fpk` 仅用于本地安装测试，不应提交到 GitHub。
 
 ## 使用说明
 
@@ -141,14 +140,14 @@ F:\FNTree-\.official\fntree\fntree.fpk
 
 ## 仓库说明
 
-- 这个仓库以应用源码为主，不包含正式发布流程。
-- `docs/` 中保留页面截图和设计素材。
-- `scripts/` 中保留辅助生成脚本。
-- 临时验证目录、安装包和构建产物都已在 `.gitignore` 中排除。
+- 仓库以应用源码为主，不包含正式发布产物。
+- `docs/` 中保留截图和设计资料。
+- `scripts/` 中保留辅助脚本。
+- 临时验证目录、安装包和构建产物已在 `.gitignore` 中排除。
 
 ## 维护建议
 
-如果要继续维护，建议先从这几处入手：
+如果要继续维护，建议优先阅读：
 
 - `.official/fntree/app/ui/index.html`
 - `.official/fntree/app/ui/styles.css`

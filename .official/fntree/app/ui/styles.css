@@ -1369,7 +1369,7 @@ h1 {
   display: block;
   flex: 1;
   min-height: 360px;
-  max-height: none;
+  max-height: clamp(360px, 52vh, 560px);
   overflow: auto;
   padding-right: 6px;
 }
@@ -1798,7 +1798,7 @@ h1 {
 
   .search-result-list {
     min-height: 360px;
-    max-height: none;
+    max-height: 460px;
   }
 
   #treemapView {
