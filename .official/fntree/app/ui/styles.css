@@ -50,6 +50,7 @@
 
 mdui-button:not(:defined),
 mdui-button-icon:not(:defined),
+mdui-text-field:not(:defined),
 mdui-dropdown:not(:defined),
 mdui-menu:not(:defined),
 mdui-tooltip:not(:defined),
@@ -390,7 +391,8 @@ h1 {
 }
 
 .analysis-control-shell {
-  grid-template-columns: 36px minmax(0, 1fr) 160px;
+  grid-template-columns: 40px minmax(0, 1fr) 160px;
+  align-items: end;
 }
 
 .analysis-query-field,
@@ -401,16 +403,7 @@ h1 {
 .analysis-path-input {
   width: 100%;
   display: block;
-  padding: 0 18px;
-  border: 1px solid var(--panel-border);
-  border-radius: 999px;
-  background:
-    linear-gradient(180deg, var(--surface-input-start), var(--surface-input-end)),
-    var(--accent-soft-bg-muted);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-on-accent) 50%, transparent);
-  color: var(--text-main);
-  outline: none;
-  appearance: none;
+  --shape-corner: 999px;
   --mdui-shape-corner-extra-small: 18px;
   --mdui-shape-corner-small: 18px;
   --mdui-shape-corner-medium: 18px;
@@ -418,10 +411,33 @@ h1 {
   --mdui-color-primary: var(--accent-rgb);
 }
 
-.analysis-path-input:focus {
+.analysis-path-input::part(container) {
+  min-height: 40px;
+  padding: 0;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface-raised) 88%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-on-accent) 28%, transparent);
+}
+
+.analysis-path-input::part(input) {
+  height: 40px;
+  min-height: 40px;
+  padding-inline: 18px;
+  padding-block: 0;
+  margin: 0;
+  box-sizing: border-box;
+  color: var(--text-main);
+  font-size: 16px;
+  line-height: 40px;
+  vertical-align: middle;
+}
+
+.analysis-path-input:focus-within::part(container),
+.analysis-path-input[focused]::part(container) {
   border-color: rgba(var(--accent-rgb), 0.4);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, var(--surface-on-accent) 60%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--surface-on-accent) 34%, transparent),
     0 0 0 3px rgba(var(--accent-rgb), 0.12);
 }
 
@@ -432,17 +448,15 @@ h1 {
 
 .analysis-path-picker .path-picker-trigger,
 .search-path-picker .path-picker-trigger {
-  width: 36px;
-  min-width: 36px;
-  height: 36px;
-  min-height: 36px;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  min-height: 40px;
 }
 
 .analysis-query-input {
-  height: 36px;
-  min-height: 36px;
-  font-size: 16px;
-  line-height: 36px;
+  height: 40px;
+  min-height: 40px;
 }
 
 .analysis-query-input[type='search']::-webkit-search-decoration,
@@ -459,8 +473,8 @@ h1 {
 .analysis-submit-button::part(button) {
   width: 160px;
   min-width: 160px;
-  height: 36px;
-  min-height: 36px;
+  height: 40px;
+  min-height: 40px;
   padding: 0 18px;
 }
 
@@ -1588,11 +1602,11 @@ h1 {
 
 .search-bar-shell {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr) 160px;
-  align-items: center;
+  grid-template-columns: 40px minmax(0, 1fr) 160px;
+  align-items: end;
   gap: 8px;
   width: 100%;
-  min-height: 36px;
+  min-height: 40px;
   padding: 0;
   border-radius: 999px;
   border: 0;
@@ -1617,9 +1631,9 @@ h1 {
 }
 
 .search-path-picker .path-picker-trigger {
-  width: 36px;
-  height: 36px;
-  min-width: 36px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
 }
 
 .search-scope-icon {
@@ -1634,16 +1648,8 @@ h1 {
 }
 
 .search-query-input {
-  min-height: 36px;
-  height: 36px;
-  padding: 0 8px;
-  border: 0;
-  background: transparent;
-  box-shadow: none;
-  border-radius: 0;
-  font-size: 16px;
-  line-height: 36px;
-  outline: none;
+  min-height: 40px;
+  height: 40px;
 }
 
 .search-submit-icon-button {
@@ -1654,8 +1660,8 @@ h1 {
 .search-submit-icon-button::part(button) {
   width: 160px;
   min-width: 160px;
-  height: 36px;
-  min-height: 36px;
+  height: 40px;
+  min-height: 40px;
   padding: 0 18px;
 }
 

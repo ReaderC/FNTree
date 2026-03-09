@@ -106,11 +106,12 @@
 
               <div class="field search-query-field analysis-query-field">
                 <span class="field-label search-inline-label">分析目录</span>
-                <input
+                <mdui-text-field
                   id="pathInput"
                   class="analysis-path-input search-query-input analysis-query-input"
+                  variant="outlined"
                   placeholder="/vol1/media"
-                />
+                ></mdui-text-field>
               </div>
 
               <mdui-button
@@ -178,8 +179,8 @@
               <div class="card-title">详情</div>
               <div id="selectionDetails" class="selection-empty">点击任意块查看详情</div>
               <div class="inspector-actions">
-                <mdui-button id="exportResultButton" variant="tonal">导出结果</mdui-button>
-                <mdui-button id="copyPathButton" variant="tonal">复制路径</mdui-button>
+                <mdui-button id="exportResultButton" variant="outlined">导出结果</mdui-button>
+                <mdui-button id="copyPathButton" variant="outlined">复制路径</mdui-button>
               </div>
               <div class="inspector-list-header">
                 <div class="card-title sub-card-title">当前层级子项</div>
@@ -251,13 +252,14 @@
 
                   <div class="field search-query-field">
                     <span class="field-label search-inline-label">关键词</span>
-                    <input
+                    <mdui-text-field
                       id="searchQuery"
                       class="analysis-path-input search-query-input"
+                      variant="outlined"
                       type="search"
                       placeholder="关键词，或 @子目录 /绝对路径 后继续选目录"
                       autocomplete="off"
-                    />
+                    ></mdui-text-field>
                   </div>
 
                   <mdui-button
@@ -359,7 +361,7 @@
                     <span class="search-reset-anchor">
                       <mdui-button-icon
                         id="searchResetButton"
-                        variant="tonal"
+                        variant="outlined"
                         class="search-reset-inline search-reset-circle-button"
                         aria-label="清空结果"
                       >
